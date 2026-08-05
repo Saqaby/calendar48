@@ -187,7 +187,7 @@ body.dark .yd:hover{filter:brightness(1.3)}
 /* ===== اللوحة الجانبية ===== */
 aside{position:sticky;top:196px;display:flex;flex-direction:column;gap:14px}
 .pan{padding:16px}
-.pan h3{margin:0 0 3px;font-size:17px;font-weight:800;letter-spacing:-.1px}
+.pan h3{margin:0 0 3px;font-size:17px;font-weight:700;font-family:'Reem Kufi',sans-serif}
 .pan .sub{font-size:12.5px;color:var(--muted);margin-bottom:12px}
 .mklist{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
 .tlist{display:flex;flex-direction:column;gap:8px;max-height:42vh;overflow:auto;margin:0 -4px;padding:0 4px}
@@ -252,7 +252,7 @@ body.dark .sw{background:#3A4C60}
 .ov[hidden]{display:none}
 .modal{background:var(--card);border-radius:18px;width:min(580px,100%);box-shadow:0 24px 70px rgba(0,0,0,.35);margin:auto}
 .mhead{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
-.mhead h2{margin:0;font-size:18px;font-weight:800;flex:1;letter-spacing:-.1px}
+.mhead h2{margin:0;font-size:18px;font-family:'Reem Kufi',sans-serif;font-weight:600;flex:1}
 .mbody{padding:18px 20px;display:flex;flex-direction:column;gap:15px}
 .f{display:flex;flex-direction:column;gap:6px}
 .f>label{font-size:12.5px;font-weight:700;color:var(--ink);opacity:.8}
@@ -298,9 +298,8 @@ body.dark .d7[aria-pressed="true"]{background:var(--crystal);color:#0B1622}
 
 footer.sig{max-width:1620px;margin:0 auto;padding:6px 18px 34px;display:flex;flex-wrap:wrap;gap:10px;
   align-items:center;justify-content:center;font-size:11.5px;color:var(--muted);text-align:center}
-footer.sig .cr{display:inline-flex;align-items:center;gap:5px}
-footer.sig .cr em{font-style:normal;color:var(--muted);opacity:.85;font-weight:500}
-footer.sig b{color:var(--ink);font-weight:700}
+footer.sig .cr{display:inline-flex;align-items:center;gap:6px}
+footer.sig b{color:var(--ink)}
 footer.sig .sep{color:var(--line)}
 footer.sig .slink{background:var(--soft2);color:var(--muted)}
 
@@ -477,10 +476,10 @@ footer.sig .slink{background:var(--soft2);color:var(--muted)}
 </div>
 
 <footer class="sig">
-  <span class="cr"><em>التقويم السنوي من تصميم</em> <b>أ. خالد الرفاعي</b>
+  <span class="cr">بيانات التقويم الهجري ١٤٤٨هـ عن تصميم <b>أ. خالد الرفاعي</b>
     <a class="slink" href="https://x.com/KhalidRefaei" target="_blank" rel="noopener noreferrer" title="حساب أ. خالد الرفاعي على منصة X"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a></span>
   <span class="sep">•</span>
-  <span class="cr"><em>إعداد الموقع وتطويره</em> <b>أ. سلمان الصقعبي</b>
+  <span class="cr">تحويله إلى موقع تفاعلي لإدارة المهام: <b>أ. سلمان الصقعبي</b>
     <a class="slink" href="https://www.linkedin.com/in/%D8%B3%D9%84%D9%85%D8%A7%D9%86-%D8%A7%D9%84%D8%B5%D9%82%D8%B9%D8%A8%D9%8A-78a098159/" target="_blank" rel="noopener noreferrer" title="حساب أ. سلمان الصقعبي على لينكدإن"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.55V9h3.57v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.72v20.56C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.72V1.72C24 .77 23.2 0 22.22 0z"/></svg></a></span>
 </footer>
 
@@ -700,12 +699,12 @@ const SEASONS=[
 ];
 const seasonOf = i => { const s=iso(idxToG(i)); return SEASONS.find(x=>s>=x.from&&s<=x.to)||SEASONS[0]; };
 
-/* الإجازات المدرسية كما في التقويم الأصل */
+/* الإجازات المدرسية — المسميات والفترات وفق التقويم الدراسي ١٤٤٨/١٤٤٩هـ الصادر عن وزارة التعليم */
 const SCHOOL=[
-  [12,65,"الإجازة الصيفية"],
-  [100,100,"إجازة اليوم الوطني"],
-  [159,163,"إجازة نهاية الفصل الأول"],
-  [208,212,"إجازة نهاية الفصل الثاني"],
+  [12,65,"إجازة نهاية العام الدراسي"],
+  [99,100,"إجازة اليوم الوطني"],
+  [159,163,"إجازة الخريف"],
+  [208,212,"إجازة منتصف العام الدراسي"],
   [250,251,"إجازة يوم التأسيس"],
   [257,268,"إجازة عيد الفطر"],
   [327,338,"إجازة عيد الأضحى"]
