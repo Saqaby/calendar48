@@ -126,7 +126,7 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
 
         {t.stage === 'answering' && answering && (
           <div className="ctrl-row">
-            <p className="ctrl-hint">يجيب الآن: <b style={{ color: answering.color }}>{answering.name}</b>
+            <p className="ctrl-hint">يجيب الآن: <b style={{ color: `color-mix(in srgb, ${answering.color} 70%, #14213d)` }}>{answering.name}</b>
               {t.mode === 'confront' || t.mode === 'tiebreak' ? ` — ${fmt(Math.round(t.timer!.durationMs / 1000))} ثوانٍ` : ''}</p>
             <div className="judge-buttons">
               <button className="btn success xl" onClick={() => dispatch({ type: 'MARK', result: 'correct', now: Date.now() })}><Icon name="check" /> إجابة صحيحة</button>

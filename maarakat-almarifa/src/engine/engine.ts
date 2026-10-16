@@ -41,13 +41,17 @@ export function computeEffect(
       }
       return { deltas, positive: false, title: 'لم تنجح إعادة التعبئة', lines: [`${name(init)} ينتظر دوره التالي`] };
     case 'confront': {
+      // الجيش الذي يجيب صحيحًا يأخذ جنود المواجهة من الجيش الآخر
       const opp = turn.opponentId!;
       if (winnerId === init) {
-        deltas[init!] = 2 * s;
-        deltas[opp] = 0;
+        const taken = Math.min(s, soldiers(opp));
+        deltas[init!] = taken;
+        deltas[opp] = -taken;
         return {
           deltas, positive: true, title: 'حُسمت المعركة',
-          lines: [`${name(init)} يكسب ${fmt(2 * s)} جنديًا (ضعف جنود المواجهة)`, `${name(opp)} لا يخسر شيئًا`],
+          lines: taken > 0
+            ? [`${name(opp)} يخسر ${fmt(taken)} جنديًا`, `تنتقل إلى ${name(init)} فيكسب ${fmt(taken)} جنديًا`]
+            : [`${name(opp)} لا يملك جنودًا لتنتقل`, `${name(init)} لا يكسب شيئًا`],
         };
       }
       const lost = Math.min(s, soldiers(init));

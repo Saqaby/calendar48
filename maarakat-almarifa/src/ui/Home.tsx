@@ -18,7 +18,7 @@ export function Home({ api }: { api: AppApi }) {
   return (
     <main className="home">
       <div className="home-hero">
-        <div className="home-badge"><Emblem id="shield" color="#3ef08a" size={92} /></div>
+        <div className="home-badge"><Emblem id="shield" color="#ffc233" size={96} /></div>
         <p className="eyebrow">غرفة العمليات جاهزة</p>
         <h1 className="game-title">معركة المعرفة</h1>
         <p className="tagline">اجمعوا جنودكم بالمعرفة، واحسموا المعركة بالسرعة.</p>

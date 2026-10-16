@@ -61,10 +61,15 @@ describe('التعزيزات', () => {
     const after = run(s, { type: 'START_TURN', stake: 20, now: NOW });
     expect(after).toBe(s);
   });
-  it('فوز ألف: ٧٠ وباء بلا تغيير', () => {
+  it('فوز ألف: ٦٠ وباء ٤٠ (تنتقل جنود المواجهة من باء إلى ألف)', () => {
     const s = confront(createGame(settings(), NOW), 10, 't1', 'init');
-    expect(soldiers(s)).toEqual({ 'ألف': 70, 'باء': 50 });
+    expect(soldiers(s)).toEqual({ 'ألف': 60, 'باء': 40 });
     expect(s.teams[0].stats.confrontWins).toBe(1);
+  });
+  it('فوز المبادر على خصم رصيده أقل من جنود المواجهة: ينتقل ما لديه فقط', () => {
+    const e = computeEffect({ mode: 'confront', stake: 20, initiatorId: 'a', opponentId: 'b' }, 'a',
+      [{ id: 'a', name: 'أ', soldiers: 50 }, { id: 'b', name: 'ب', soldiers: 15 }] as never);
+    expect(e.deltas).toEqual({ a: 15, b: -15 });
   });
   it('فوز باء: ألف ٤٠ وباء +١٠', () => {
     const s = confront(createGame(settings(), NOW), 10, 't1', 'opp');

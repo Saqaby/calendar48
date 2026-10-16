@@ -78,7 +78,7 @@ export function GameScreen({ api, game }: { api: AppApi; game: GameState }) {
   return (
     <main className="game">
       <header className="topbar">
-        <div className="brand-mini"><Emblem id="shield" color="#3ef08a" size={36} /><span>معركة المعرفة</span></div>
+        <div className="brand-mini"><Emblem id="shield" color="#ffc233" size={38} /><span>معركة المعرفة</span></div>
         <div className="topbar-status">
           <span className="chip round">الجولة {fmt(game.round)}</span>
           {game.endgame && <span className="chip alert">الجولة الأخيرة</span>}

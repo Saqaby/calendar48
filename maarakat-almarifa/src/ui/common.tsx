@@ -33,14 +33,14 @@ export const EMBLEMS: { id: string; label: string; node: ReactNode }[] = [
 ];
 
 export const TEAM_COLORS = [
-  { value: '#3b9cff', label: 'أزرق' },
-  { value: '#ff8c2a', label: 'برتقالي' },
-  { value: '#a874ff', label: 'بنفسجي' },
-  { value: '#22d3c5', label: 'فيروزي' },
-  { value: '#ffd23f', label: 'أصفر' },
-  { value: '#ff5fa2', label: 'وردي' },
-  { value: '#9be22d', label: 'ليموني' },
-  { value: '#e0e6ee', label: 'فضي' },
+  { value: '#2f6bff', label: 'أزرق' },
+  { value: '#ff7a1a', label: 'برتقالي' },
+  { value: '#8a4dff', label: 'بنفسجي' },
+  { value: '#00a99d', label: 'فيروزي' },
+  { value: '#f5b800', label: 'أصفر' },
+  { value: '#e8418c', label: 'وردي' },
+  { value: '#5bb318', label: 'أخضر' },
+  { value: '#6b7a99', label: 'رمادي' },
 ];
 
 export function Emblem({ id, color, size = 64, className = '' }: { id: string; color: string; size?: number; className?: string }) {
@@ -51,11 +51,11 @@ export function Emblem({ id, color, size = 64, className = '' }: { id: string; c
       <defs>
         <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor={color} />
-          <stop offset="1" stopColor={color} stopOpacity="0.55" />
+          <stop offset="1" stopColor={color} stopOpacity="0.8" />
         </linearGradient>
       </defs>
-      <path d="M24 2l20 6.5v14c0 13.5-8.6 23.3-20 27.5C12.6 45.8 4 36 4 22.5v-14z" fill={`url(#${gid})`} stroke="rgba(255,255,255,.55)" strokeWidth="1.6" />
-      <path d="M24 6.5l16 5.2v11c0 11-6.9 19-16 22.6C14.9 41.7 8 33.7 8 22.7v-11z" fill="rgba(5,10,20,.55)" />
+      <path d="M24 2l20 6.5v14c0 13.5-8.6 23.3-20 27.5C12.6 45.8 4 36 4 22.5v-14z" fill={`url(#${gid})`} stroke="#14213d" strokeWidth="3" />
+      <path d="M24 6.5l16 5.2v11c0 11-6.9 19-16 22.6C14.9 41.7 8 33.7 8 22.7v-11z" fill="#14213d" />
       <g transform="translate(12 12.5)" fill="currentColor" color="#fff">{e.node}</g>
     </svg>
   );

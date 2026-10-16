@@ -13,7 +13,7 @@ export function Victory({ api, game }: { api: AppApi; game: GameState }) {
     if (!played.current) { played.current = true; play('victory'); }
   }, []);
   const confetti = Array.from({ length: 36 }, (_, i) => i);
-  const colors = ['#f5c542', '#3ef08a', '#ffffff', winner.color];
+  const colors = ['#ffc233', '#1faf63', '#f04a32', '#ffffff', winner.color];
 
   return (
     <main className="victory" style={{ '--team': winner.color } as CSSProperties}>
