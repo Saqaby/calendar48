@@ -1,22 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createGame, reducer } from './engine/engine';
-import { Action, GameState, Question, Settings } from './engine/types';
-import { loadBank, loadGame, loadPrefs, loadSettings, saveBank, saveGame, savePrefs, saveSettings } from './storage';
+import { Action, GameState, Settings } from './engine/types';
+import { loadGame, loadPrefs, loadSettings, saveGame, savePrefs, saveSettings } from './storage';
 import { play, setMuted, unlockAudio } from './audio';
 import { ConfirmDialog, ConfirmRequest, Icon } from './ui/common';
 import { Home } from './ui/Home';
 import { Setup } from './ui/Setup';
 import { GameScreen } from './ui/GameScreen';
-import { Bank } from './ui/Bank';
 import { Rules } from './ui/Rules';
 
-export type Screen = 'home' | 'setup' | 'game' | 'bank' | 'rules';
+export type Screen = 'home' | 'setup' | 'game' | 'rules';
 
 export interface AppApi {
   go: (s: Screen) => void;
   confirm: (r: ConfirmRequest) => void;
-  bank: Question[];
-  setBank: (b: Question[]) => void;
   game: GameState | null;
   dispatch: (a: Action) => void;
   startGame: (s: Settings) => void;
@@ -25,7 +22,6 @@ export interface AppApi {
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
-  const [bank, setBankState] = useState<Question[]>(loadBank);
   const [game, setGame] = useState<GameState | null>(loadGame);
   const [prefs, setPrefs] = useState(loadPrefs);
   const [confirmReq, setConfirmReq] = useState<ConfirmRequest | null>(null);
@@ -64,13 +60,10 @@ export default function App() {
   }, []);
 
   const dispatch = useCallback((a: Action) => setGame((g) => (g ? reducer(g, a) : g)), []);
-  const setBank = useCallback((b: Question[]) => { setBankState(b); saveBank(b); }, []);
 
   const api: AppApi = {
     go: (s) => { setScreen(s); window.scrollTo(0, 0); },
     confirm: setConfirmReq,
-    bank,
-    setBank,
     game,
     dispatch,
     startGame: (s) => { saveSettings(s); setGame(createGame(s, Date.now())); setScreen('game'); play('turn'); },
@@ -111,7 +104,6 @@ export default function App() {
       {screen === 'setup' && <Setup api={api} initial={loadSettings()} />}
       {screen === 'game' && game && <GameScreen api={api} game={game} />}
       {screen === 'game' && !game && <Home api={api} />}
-      {screen === 'bank' && <Bank api={api} />}
       {screen === 'rules' && <Rules api={api} />}
 
       {confirmReq && <ConfirmDialog req={confirmReq} onClose={() => setConfirmReq(null)} />}

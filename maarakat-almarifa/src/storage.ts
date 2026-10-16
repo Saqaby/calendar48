@@ -1,10 +1,8 @@
 import { freeze, isValidGame } from './engine/engine';
-import { GameState, Question, Settings } from './engine/types';
-import { SEED_QUESTIONS } from './data/seed';
+import { GameState, Settings } from './engine/types';
 
 const K = {
-  bank: 'mk.bank.v1',
-  game: 'mk.game.v1',
+  game: 'mk.game.v2',
   prefs: 'mk.prefs.v1',
   settings: 'mk.settings.v1',
 };
@@ -26,12 +24,6 @@ function write(key: string, value: unknown): boolean {
     return false;
   }
 }
-
-export function loadBank(): Question[] {
-  const b = read<Question[]>(K.bank);
-  return Array.isArray(b) ? b : SEED_QUESTIONS;
-}
-export const saveBank = (b: Question[]) => write(K.bank, b);
 
 export function loadGame(): GameState | null {
   const g = read<unknown>(K.game);

@@ -367,6 +367,13 @@ textarea.input { resize: vertical; }
 .q-side.out { opacity: .4; }
 .q-side.winner { border-color: var(--gold); box-shadow: 0 0 24px rgba(245, 197, 66, .4); }
 .q-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: center; min-height: 180px; }
+.q-level { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.q-level-label { font-size: clamp(1.4rem, 2.4vw, 2.2rem); font-weight: 700; color: #cfe0f2; }
+.q-level-name { font-size: clamp(4rem, 9vw, 8.5rem); font-weight: 900; line-height: 1.35; }
+.q-level.diff-easy .q-level-name { color: var(--easy); }
+.q-level.diff-medium .q-level-name { color: var(--medium); }
+.q-level.diff-hard .q-level-name { color: var(--hard); }
+.q-level-hint { color: var(--muted); font-size: 1.15rem; }
 .q-text { font-size: clamp(1.9rem, 3.6vw, 3.6rem); font-weight: 900; line-height: 1.45; text-align: center; text-wrap: balance; }
 html.projector .q-text { font-size: clamp(2.2rem, 4.2vw, 4.2rem); }
 @media (max-width: 800px) { .q-body { grid-template-columns: 1fr; justify-items: center; } }

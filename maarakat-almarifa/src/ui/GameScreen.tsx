@@ -3,21 +3,16 @@ import type { AppApi } from '../App';
 import {
   allowedOpponents, allowedStakes, clockElapsed, computeEffect, currentTeam, fmt, ranking,
 } from '../engine/engine';
-import { availableQuestions, pickQuestion } from '../engine/questions';
 import {
-  Difficulty, DIFFICULTY_LABEL, GameState, Question, REFILL_SOLDIERS, Stake, STAKE_DIFFICULTY, STAKES, TeamState,
-  TIEBREAK_DIFFICULTY,
+  DIFFICULTY_LABEL, GameState, REFILL_SOLDIERS, Stake, STAKE_DIFFICULTY, STAKES, TeamState,
 } from '../engine/types';
 import { play } from '../audio';
-import { Delta, Emblem, formatClock, Icon, Modal, useNow } from './common';
+import { Delta, Emblem, formatClock, Icon, useNow } from './common';
 import { QuestionStage } from './QuestionStage';
 import { Victory } from './Victory';
 
-export interface Shortage { difficulty: Difficulty; allowOther: boolean }
-
 export function GameScreen({ api, game }: { api: AppApi; game: GameState }) {
   const { dispatch } = api;
-  const [shortage, setShortage] = useState<Shortage | null>(null);
   const timeMode = game.settings.endMode === 'time';
   const paused = game.clock.runningSince == null && game.phase !== 'finished';
   const now = useNow(!paused && game.phase !== 'finished', 500);
@@ -26,13 +21,6 @@ export function GameScreen({ api, game }: { api: AppApi; game: GameState }) {
   useEffect(() => {
     if (timeMode && !game.endgame && !paused) dispatch({ type: 'CLOCK_CHECK', now });
   }, [now, timeMode, game.endgame, paused, dispatch]);
-
-  /** يختار سؤالًا غير مستخدم من المستوى المطلوب، أو يعرض خيارات النفاد */
-  const withQuestion = (difficulty: Difficulty, allowOther: boolean, fn: (q: Question) => void) => {
-    const q = pickQuestion(api.bank, game.usedQuestionIds, difficulty);
-    if (q) fn(q);
-    else setShortage({ difficulty, allowOther });
-  };
 
   /* المؤثرات الصوتية عند تغيّر الحالة (دون تشغيلها عند الاستعادة) */
   const turnKey = `${game.round}-${game.currentIndex}-${game.phase === 'choose_action'}`;
@@ -126,11 +114,11 @@ export function GameScreen({ api, game }: { api: AppApi; game: GameState }) {
 
         <section className="command" aria-live="polite">
           {game.phase === 'question' && game.turn ? (
-            <QuestionStage api={api} game={game} paused={paused} onShortage={setShortage} />
+            <QuestionStage api={api} game={game} paused={paused} />
           ) : game.phase === 'tiebreak' ? (
-            <TiebreakPanel game={game} onStart={() => withQuestion(TIEBREAK_DIFFICULTY, false, (q) => dispatch({ type: 'START_TIEBREAK', question: q, now: Date.now() }))} />
+            <TiebreakPanel game={game} onStart={() => dispatch({ type: 'START_TIEBREAK', now: Date.now() })} />
           ) : (
-            <TurnPanel api={api} game={game} withQuestion={withQuestion} />
+            <TurnPanel api={api} game={game} />
           )}
         </section>
 
@@ -148,7 +136,6 @@ export function GameScreen({ api, game }: { api: AppApi; game: GameState }) {
       </div>
 
       {flash && <FlashOverlay flash={flash} teams={game.teams} onClose={() => setFlash(null)} />}
-      {shortage && <ShortageModal api={api} game={game} shortage={shortage} onClose={() => setShortage(null)} />}
     </main>
   );
 }
@@ -225,9 +212,7 @@ function Units({ soldiers }: { soldiers: number }) {
 
 /* ---------------- لوحة الدور ---------------- */
 
-function TurnPanel({ api, game, withQuestion }: {
-  api: AppApi; game: GameState; withQuestion: (d: Difficulty, allowOther: boolean, fn: (q: Question) => void) => void;
-}) {
+function TurnPanel({ api, game }: { api: AppApi; game: GameState }) {
   const { dispatch } = api;
   const team = currentTeam(game);
   const [opponentId, setOpponentId] = useState<string | null>(null);
@@ -256,7 +241,7 @@ function TurnPanel({ api, game, withQuestion }: {
         <div className="refill-card">
           <h3>إعادة التعبئة</h3>
           <p>سؤال سهل: الإجابة الصحيحة تعيدكم إلى الميدان بـ{fmt(REFILL_SOLDIERS)} جنود، والخاطئة تنتظرون بعدها دوركم التالي.</p>
-          <button className="btn primary xl" onClick={() => withQuestion('easy', false, (q) => dispatch({ type: 'START_REFILL', question: q, now: Date.now() }))}>
+          <button className="btn primary xl" onClick={() => dispatch({ type: 'START_REFILL', now: Date.now() })}>
             طرح سؤال إعادة التعبئة
           </button>
         </div>
@@ -285,15 +270,11 @@ function TurnPanel({ api, game, withQuestion }: {
   const mode = game.pendingMode!;
   const stakes = allowedStakes(team.soldiers);
   const opps = allowedOpponents(game, team.id);
-  const left = (d: Difficulty) => availableQuestions(api.bank, game.usedQuestionIds, d).length;
   const opponent = game.teams.find((t) => t.id === opponentId) ?? null;
 
   const begin = (s: Stake) => {
-    const d = STAKE_DIFFICULTY[s];
-    withQuestion(d, true, (q) => {
-      dispatch({ type: 'START_TURN', stake: s, opponentId: mode === 'confront' ? opponentId! : undefined, question: q, now: Date.now() });
-      if (mode === 'confront') play('confront');
-    });
+    dispatch({ type: 'START_TURN', stake: s, opponentId: mode === 'confront' ? opponentId! : undefined, now: Date.now() });
+    if (mode === 'confront') play('confront');
   };
 
   return (
@@ -329,7 +310,6 @@ function TurnPanel({ api, game, withQuestion }: {
           {STAKES.map((s) => {
             const d = STAKE_DIFFICULTY[s];
             const tooMany = !stakes.includes(s);
-            const n = left(d);
             const disabled = tooMany || (mode === 'confront' && !opponent);
             return (
               <button key={s} className={`mission diff-${d} ${stake === s ? 'on' : ''}`} disabled={disabled}
@@ -344,7 +324,6 @@ function TurnPanel({ api, game, withQuestion }: {
                   </span>
                 )}
                 {tooMany && <span className="mission-note">يتجاوز رصيدكم</span>}
-                {!tooMany && <span className={`mission-left ${n === 0 ? 'none' : ''}`}>{n === 0 ? 'نفدت أسئلة هذا المستوى' : `متبقٍ ${fmt(n)} سؤالًا`}</span>}
               </button>
             );
           })}
@@ -397,7 +376,7 @@ function TiebreakPanel({ game, onStart }: { game: GameState; onStart: () => void
           </div>
         ))}
       </div>
-      <p className="muted">سؤال متوسط للجيوش المتعادلة. أول جيش يجيب صحيحًا يفوز بالمعركة. الأرصدة لا تتغير.</p>
+      <p className="muted">اطرح سؤالًا متوسطًا من الكتاب للجيوش المتعادلة. أول جيش يجيب صحيحًا يفوز بالمعركة. الأرصدة لا تتغير.</p>
       <button className="btn gold xl" onClick={onStart}>طرح سؤال فاصل</button>
     </div>
   );
@@ -426,33 +405,3 @@ function FlashOverlay({ flash, teams, onClose }: { flash: NonNullable<GameState[
   );
 }
 
-/* ---------------- نفاد الأسئلة ---------------- */
-
-function ShortageModal({ api, game, shortage, onClose }: { api: AppApi; game: GameState; shortage: Shortage; onClose: () => void }) {
-  const label = DIFFICULTY_LABEL[shortage.difficulty];
-  const levelIds = api.bank.filter((q) => q.difficulty === shortage.difficulty).map((q) => q.id);
-  return (
-    <Modal title={`نفدت أسئلة المستوى «${label}»`} onClose={onClose} tone="danger">
-      <p>استُخدمت كل أسئلة هذا المستوى في هذه المباراة. لن يُكرَّر أي سؤال ولن يُغيَّر المستوى إلا باختيارك:</p>
-      <div className="choice-list">
-        {shortage.allowOther && (
-          <button className="btn outline block" onClick={onClose}>اختيار عدد جنود آخر (مستوى مختلف)</button>
-        )}
-        <button className="btn outline block" onClick={() => { onClose(); api.go('bank'); }}>
-          إضافة أسئلة جديدة من «بنك الأسئلة» <small>المباراة محفوظة ويمكن العودة إليها</small>
-        </button>
-        {levelIds.length > 0 && (
-          <button className="btn outline block" onClick={() => { dispatch(); onClose(); }}>
-            السماح بإعادة استخدام أسئلة هذا المستوى <small>سيُسجَّل ذلك في سجل المعركة</small>
-          </button>
-        )}
-        <button className="btn danger block" onClick={() => { onClose(); api.dispatch({ type: 'END_NOW', now: Date.now() }); }} disabled={game.phase === 'tiebreak'}>
-          إنهاء المباراة الآن وإعلان النتيجة
-        </button>
-      </div>
-    </Modal>
-  );
-  function dispatch() {
-    api.dispatch({ type: 'RELEASE_LEVEL', difficulty: shortage.difficulty, bankIds: levelIds });
-  }
-}

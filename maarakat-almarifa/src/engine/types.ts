@@ -14,15 +14,6 @@ export const REFILL_SOLDIERS = 10;
 export const TIEBREAK_DIFFICULTY: Difficulty = 'medium';
 export const HISTORY_LIMIT = 30;
 
-export interface Question {
-  id: string;
-  text: string;
-  answer: string;
-  difficulty: Difficulty;
-  category: string;
-  explanation?: string;
-}
-
 export interface TeamConfig {
   id: string;
   name: string;
@@ -73,7 +64,8 @@ export interface Turn {
   /** null في الأسئلة الفاصلة */
   initiatorId: string | null;
   opponentId: string | null;
-  question: Question;
+  /** رقم السؤال المتسلسل في المباراة، ليتتبّع المقدّم موضعه في الكتاب */
+  questionNo: number;
   stage: Stage;
   /** الفرق التي ما زال يحق لها الإجابة */
   contenders: string[];
@@ -83,7 +75,6 @@ export interface Turn {
   /** هل غيّر المقدّم النتيجة يدويًا */
   overridden: boolean;
   timer: TimerState | null;
-  revealed: boolean;
 }
 
 export type Phase = 'choose_action' | 'choose_stake' | 'question' | 'tiebreak' | 'finished';
@@ -111,7 +102,7 @@ export interface Clock {
 }
 
 export interface GameCore {
-  version: 1;
+  version: 2;
   id: string;
   settings: Settings;
   teams: TeamState[];
@@ -121,7 +112,7 @@ export interface GameCore {
   pendingMode: 'reinforce' | 'confront' | null;
   turn: Turn | null;
   turnSeq: number;
-  usedQuestionIds: string[];
+  questionCount: number;
   log: LogEntry[];
   logSeq: number;
   endgame: null | { reason: 'target' | 'time' | 'manual'; round: number };
@@ -138,10 +129,10 @@ export interface GameState extends GameCore {
 export type Action =
   | { type: 'CHOOSE_MODE'; mode: 'reinforce' | 'confront' }
   | { type: 'BACK_TO_ACTION' }
-  | { type: 'START_TURN'; stake: Stake; opponentId?: string; question: Question; now: number }
-  | { type: 'START_REFILL'; question: Question; now: number }
-  | { type: 'START_TIEBREAK'; question: Question; now: number }
-  | { type: 'REPLACE_QUESTION'; question: Question }
+  | { type: 'START_TURN'; stake: Stake; opponentId?: string; now: number }
+  | { type: 'START_REFILL'; now: number }
+  | { type: 'START_TIEBREAK'; now: number }
+  | { type: 'REPLACE_QUESTION' }
   | { type: 'BEGIN'; now: number }
   | { type: 'BUZZ'; teamId: string; now: number }
   | { type: 'MARK'; result: AttemptResult; now: number }
@@ -150,11 +141,9 @@ export type Action =
   | { type: 'PAUSE_TIMER'; now: number }
   | { type: 'RESUME_TIMER'; now: number }
   | { type: 'SET_WINNER'; winnerId: string | null }
-  | { type: 'REVEAL' }
   | { type: 'CONFIRM'; seq: number; now: number }
   | { type: 'UNDO' }
   | { type: 'CLOCK_PAUSE'; now: number }
   | { type: 'CLOCK_RESUME'; now: number }
   | { type: 'CLOCK_CHECK'; now: number }
-  | { type: 'END_NOW'; now: number }
-  | { type: 'RELEASE_LEVEL'; difficulty: Difficulty; bankIds: string[] };
+  | { type: 'END_NOW'; now: number };

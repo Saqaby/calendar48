@@ -30,7 +30,6 @@ export function Home({ api }: { api: AppApi }) {
               <small>الجولة {fmt(g!.round)} · {g!.teams.length.toLocaleString('ar-EG')} جيوش</small>
             </button>
           )}
-          <button className="btn outline lg" onClick={() => api.go('bank')}>بنك الأسئلة <small>{fmt(api.bank.length)} سؤالًا</small></button>
           <button className="btn outline lg" onClick={() => api.go('rules')}>قواعد اللعب</button>
         </nav>
       </div>

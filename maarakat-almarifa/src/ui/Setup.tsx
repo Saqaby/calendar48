@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { AppApi } from '../App';
 import { Settings, TeamConfig } from '../engine/types';
-import { availableQuestions, DIFFICULTIES, diffLabel } from '../engine/questions';
 import { Emblem, EMBLEMS, Icon, TEAM_COLORS } from './common';
 
 const DEFAULT_NAMES = ['فيلق الصقور', 'فيلق البرق', 'فيلق الجبال', 'فيلق النجوم', 'فيلق القلاع', 'فيلق الشعلة'];
@@ -52,8 +51,6 @@ export function Setup({ api, initial }: { api: AppApi; initial: Settings | null 
     return { ...x, teams };
   });
 
-  const counts = useMemo(() => Object.fromEntries(DIFFICULTIES.map((d) => [d, availableQuestions(api.bank, [], d).length])), [api.bank]);
-
   const errors: string[] = [];
   const names = s.teams.map((t) => t.name.trim());
   if (names.some((n) => !n)) errors.push('اكتب اسمًا لكل جيش.');
@@ -64,7 +61,6 @@ export function Setup({ api, initial }: { api: AppApi; initial: Settings | null 
   if (s.endMode === 'time' && !(s.matchMinutes >= 1 && s.matchMinutes <= 300)) errors.push('مدة المباراة بين ١ و٣٠٠ دقيقة.');
   const warnings: string[] = [];
   if (new Set(s.teams.map((t) => t.color)).size !== s.teams.length) warnings.push('بعض الجيوش تحمل اللون نفسه؛ يُفضّل التمييز بينها.');
-  DIFFICULTIES.forEach((d) => { if (counts[d] < s.teams.length * 2) warnings.push(`أسئلة المستوى «${diffLabel(d)}» قليلة (${counts[d].toLocaleString('ar-EG')}). قد تنفد أثناء المباراة.`); });
 
   const start = () => {
     if (errors.length) return;
@@ -175,13 +171,7 @@ export function Setup({ api, initial }: { api: AppApi; initial: Settings | null 
             </div>
           </fieldset>
 
-          <div className="bank-summary">
-            <h3>بنك الأسئلة</h3>
-            <div className="chips">
-              {DIFFICULTIES.map((d) => <span key={d} className={`chip diff-${d}`}>{diffLabel(d)}: {counts[d].toLocaleString('ar-EG')}</span>)}
-            </div>
-            <button className="btn ghost sm" onClick={() => api.go('bank')}>إدارة الأسئلة</button>
-          </div>
+          <p className="bank-summary muted">الأسئلة يطرحها المقدّم من كتابه. تعرض اللعبة مستوى كل سؤال (٥ جنود = سهل، ١٠ = متوسط، ٢٠ = صعب) ورقمه المتسلسل.</p>
 
           {errors.length > 0 && <ul className="form-errors" role="alert">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
           {warnings.length > 0 && <ul className="form-warnings">{warnings.map((e) => <li key={e}>{e}</li>)}</ul>}

@@ -1,17 +1,13 @@
 import { CSSProperties, useEffect, useRef, useState } from 'react';
 import type { AppApi } from '../App';
 import { computeEffect, fmt, timerRemaining } from '../engine/engine';
-import { pickQuestion } from '../engine/questions';
 import { DIFFICULTY_LABEL, GameState, TeamState } from '../engine/types';
 import { play } from '../audio';
 import { Delta, Emblem, Icon, useNow } from './common';
-import type { Shortage } from './GameScreen';
 
 const MODE_LABEL = { reinforce: 'مهمة تعزيزات', confront: 'مواجهة', refill: 'إعادة التعبئة', tiebreak: 'سؤال فاصل' } as const;
 
-export function QuestionStage({ api, game, paused, onShortage }: {
-  api: AppApi; game: GameState; paused: boolean; onShortage: (s: Shortage) => void;
-}) {
+export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameState; paused: boolean }) {
   const { dispatch } = api;
   const t = game.turn!;
   const team = (id: string | null) => game.teams.find((x) => x.id === id) ?? null;
@@ -49,11 +45,7 @@ export function QuestionStage({ api, game, paused, onShortage }: {
     return () => window.removeEventListener('keydown', onKey);
   }, [t.timer, dispatch]);
 
-  const replace = () => {
-    const q = pickQuestion(api.bank, game.usedQuestionIds, t.difficulty);
-    if (q) dispatch({ type: 'REPLACE_QUESTION', question: q });
-    else onShortage({ difficulty: t.difficulty, allowOther: false });
-  };
+  const replace = () => dispatch({ type: 'REPLACE_QUESTION' });
 
   const init = team(t.initiatorId);
   const opp = team(t.opponentId);
@@ -67,7 +59,7 @@ export function QuestionStage({ api, game, paused, onShortage }: {
         <span className={`chip mode-chip mode-${t.mode}`}>{MODE_LABEL[t.mode]}</span>
         <span className={`chip diff-${t.difficulty}`}>{DIFFICULTY_LABEL[t.difficulty]}</span>
         {t.stake > 0 && <span className="chip">{fmt(t.stake)} {t.stake === 20 ? 'جنديًا' : 'جنود'} في المهمة</span>}
-        <span className="chip ghost-chip">{t.question.category}</span>
+        <span className="chip ghost-chip">السؤال رقم {fmt(t.questionNo)}</span>
       </div>
 
       <div className={`q-sides n${sides.length}`}>
@@ -84,29 +76,25 @@ export function QuestionStage({ api, game, paused, onShortage }: {
       </div>
 
       <div className="q-body">
-        <p className="q-text">{t.question.text}</p>
+        <div className={`q-level diff-${t.difficulty}`}>
+          <span className="q-level-label">{t.mode === 'refill' ? 'سؤال إعادة التعبئة' : t.mode === 'tiebreak' ? 'سؤال فاصل' : 'سؤال'}</span>
+          <span className="q-level-name">{DIFFICULTY_LABEL[t.difficulty]}</span>
+          <span className="q-level-hint">{t.stage === 'reading' ? 'يقرأ المقدّم السؤال الآن' : t.stage === 'decided' ? 'انتهت الإجابة' : 'الإجابة جارية'}</span>
+        </div>
         {t.timer && <TimerRing remaining={remaining} duration={t.timer.durationMs} running={running} />}
       </div>
-
-      {t.revealed && (
-        <div className="answer-box" role="status">
-          <span className="answer-label">الإجابة النموذجية</span>
-          <p className="answer-text">{t.question.answer}</p>
-          {t.question.explanation && <p className="answer-explain">{t.question.explanation}</p>}
-        </div>
-      )}
 
       <div className="presenter" role="group" aria-label="أدوات المقدّم">
         <span className="presenter-label">أدوات المقدّم</span>
 
         {t.stage === 'reading' && (
           <div className="ctrl-row">
-            <p className="ctrl-hint">اقرؤوا السؤال كاملًا أولًا. {t.mode === 'confront' || t.mode === 'tiebreak' ? 'لا يُقبل طلب الإجابة قبل بدء المواجهة.' : ''}</p>
+            <p className="ctrl-hint">اقرأ سؤالًا {DIFFICULTY_LABEL[t.difficulty]} من الكتاب كاملًا، ثم ابدأ. {t.mode === 'confront' || t.mode === 'tiebreak' ? 'لا يُقبل طلب الإجابة قبل بدء المواجهة.' : ''}</p>
             <button className={`btn xl ${t.mode === 'confront' ? 'danger' : t.mode === 'tiebreak' ? 'gold' : 'primary'}`} disabled={paused}
               onClick={() => dispatch({ type: 'BEGIN', now: Date.now() })}>
               {t.mode === 'confront' ? 'بدء المواجهة' : t.mode === 'tiebreak' ? 'بدء السؤال الفاصل' : `بدء المؤقّت (${fmt(game.settings.answerSeconds)} ث)`}
             </button>
-            <button className="btn ghost" onClick={replace}><Icon name="swap" size={18} /> استبدال السؤال</button>
+            <button className="btn ghost" onClick={replace}><Icon name="swap" size={18} /> سؤال بديل</button>
           </div>
         )}
 
@@ -129,7 +117,7 @@ export function QuestionStage({ api, game, paused, onShortage }: {
             <div className="ctrl-secondary">
               <TimerToggle t={t} dispatch={dispatch} />
               {t.attempts.length === 0 && t.mode === 'confront' && (
-                <button className="btn ghost" onClick={replace}><Icon name="swap" size={18} /> تعذّر تحديد الأسبق — استبدال السؤال</button>
+                <button className="btn ghost" onClick={replace}><Icon name="swap" size={18} /> تعذّر تحديد الأسبق — سؤال بديل</button>
               )}
               <button className="btn ghost danger-text" onClick={() => dispatch({ type: 'NO_BUZZ' })}>لم يُجب أحد</button>
             </div>
@@ -225,7 +213,6 @@ function Decision({ game, dispatch, confirming, onConfirm }: {
         )}
       </div>
       <div className="ctrl-row">
-        {!t.revealed && <button className="btn gold" onClick={() => dispatch({ type: 'REVEAL' })}><Icon name="eye" size={18} /> عرض الحل</button>}
         <div className="override" role="radiogroup" aria-label="تصحيح التحكيم">
           <span className="muted">تصحيح التحكيم:</span>
           {options.map((o) => (

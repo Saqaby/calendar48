@@ -1,5 +1,5 @@
 import {
-  Action, AttemptResult, Difficulty, FIRST_ANSWER_MS, GameCore, GameState, HISTORY_LIMIT, LogKind, Question,
+  Action, AttemptResult, FIRST_ANSWER_MS, GameCore, GameState, HISTORY_LIMIT, LogKind,
   REFILL_SOLDIERS, SECOND_ANSWER_MS, Settings, Stake, STAKE_DIFFICULTY, STAKES, TeamState, TIEBREAK_DIFFICULTY,
   TimerState, Turn, DIFFICULTY_LABEL,
 } from './types';
@@ -138,7 +138,7 @@ export function createGame(settings: Settings, now: number, rng: () => number = 
     stats: { correct: 0, confrontWins: 0, biggestGain: 0 },
   }));
   const g: GameState = {
-    version: 1,
+    version: 2,
     id: `g${now.toString(36)}${Math.floor(rng() * 1e6).toString(36)}`,
     settings,
     teams,
@@ -148,7 +148,7 @@ export function createGame(settings: Settings, now: number, rng: () => number = 
     pendingMode: null,
     turn: null,
     turnSeq: 0,
-    usedQuestionIds: [],
+    questionCount: 0,
     log: [],
     logSeq: 0,
     endgame: null,
@@ -188,20 +188,18 @@ function teamName(s: GameCore, id: string | null) {
 function newTurn(
   s: GameState,
   partial: Pick<Turn, 'mode' | 'stake' | 'difficulty' | 'initiatorId' | 'opponentId' | 'contenders'>,
-  question: Question,
 ): GameState {
   const seq = s.turnSeq + 1;
   const turn: Turn = {
     ...partial,
     seq,
-    question,
+    questionNo: s.questionCount + 1,
     stage: 'reading',
     attempts: [],
     answeringTeamId: null,
     winnerId: null,
     overridden: false,
     timer: null,
-    revealed: false,
   };
   return {
     ...s,
@@ -210,12 +208,8 @@ function newTurn(
     phase: 'question',
     pendingMode: null,
     flash: null,
-    usedQuestionIds: [...s.usedQuestionIds, question.id],
+    questionCount: s.questionCount + 1,
   };
-}
-
-function questionOk(s: GameCore, q: Question, difficulty: Difficulty): boolean {
-  return q.difficulty === difficulty && !s.usedQuestionIds.includes(q.id);
 }
 
 function withTurn(s: GameState, patch: Partial<Turn>): GameState {
@@ -299,46 +293,42 @@ export function reducer(s: GameState, a: Action): GameState {
       const team = currentTeam(s);
       if (!allowedStakes(team.soldiers).includes(a.stake)) return s;
       const difficulty = STAKE_DIFFICULTY[a.stake];
-      if (!questionOk(s, a.question, difficulty)) return s;
       if (s.pendingMode === 'confront') {
         if (!a.opponentId || !allowedOpponents(s, team.id).includes(a.opponentId)) return s;
         let g = newTurn(s, {
           mode: 'confront', stake: a.stake, difficulty, initiatorId: team.id, opponentId: a.opponentId,
           contenders: [team.id, a.opponentId],
-        }, a.question);
+        });
         g = { ...g, teams: g.teams.map((x) => (x.id === team.id ? { ...x, lastOpponentId: a.opponentId! } : x)) };
         return log(g, 'confront', `استعدوا للمواجهة: ${team.name} ضد ${teamName(s, a.opponentId)} بـ${fmt(a.stake)} جنود (${DIFFICULTY_LABEL[difficulty]})`);
       }
       const g = newTurn(s, {
         mode: 'reinforce', stake: a.stake, difficulty, initiatorId: team.id, opponentId: null, contenders: [team.id],
-      }, a.question);
+      });
       return log(g, 'info', `${team.name} طلب تعزيزات بـ${fmt(a.stake)} جنود (${DIFFICULTY_LABEL[difficulty]})`);
     }
     case 'START_REFILL': {
       const team = currentTeam(s);
       if (s.phase !== 'choose_action' || team.soldiers !== 0) return s;
-      if (!questionOk(s, a.question, 'easy')) return s;
       const g = newTurn(s, {
         mode: 'refill', stake: 0, difficulty: 'easy', initiatorId: team.id, opponentId: null, contenders: [team.id],
-      }, a.question);
+      });
       return log(g, 'info', `${team.name} يحاول إعادة التعبئة`);
     }
     case 'START_TIEBREAK': {
       if (s.phase !== 'tiebreak') return s;
-      if (!questionOk(s, a.question, TIEBREAK_DIFFICULTY)) return s;
       return newTurn(s, {
         mode: 'tiebreak', stake: 0, difficulty: TIEBREAK_DIFFICULTY, initiatorId: null, opponentId: null,
         contenders: [...s.tiebreakTeamIds],
-      }, a.question);
+      });
     }
     case 'REPLACE_QUESTION': {
       if (s.phase !== 'question' || !t || t.attempts.length > 0 || t.stage === 'decided' || t.stage === 'answering') return s;
-      if (!questionOk(s, a.question, t.difficulty)) return s;
       const g = {
-        ...withTurn(s, { question: a.question, stage: 'reading', timer: null, revealed: false }),
-        usedQuestionIds: [...s.usedQuestionIds, a.question.id],
+        ...withTurn(s, { questionNo: s.questionCount + 1, stage: 'reading', timer: null }),
+        questionCount: s.questionCount + 1,
       };
-      return log(g, 'info', 'استُبدل السؤال بسؤال من المستوى نفسه دون تغيير الأرصدة');
+      return log(g, 'info', `استُبدل السؤال بسؤال آخر من المستوى نفسه (رقم ${fmt(g.questionCount)}) دون تغيير الأرصدة`);
     }
     case 'BEGIN': {
       if (s.phase !== 'question' || !t || t.stage !== 'reading') return s;
@@ -386,10 +376,6 @@ export function reducer(s: GameState, a: Action): GameState {
       if (!valid) return s;
       return withTurn(s, { winnerId: a.winnerId, overridden: true });
     }
-    case 'REVEAL': {
-      if (s.phase !== 'question' || !t || t.stage !== 'decided') return s;
-      return withTurn(s, { revealed: true });
-    }
     case 'CONFIRM': {
       if (s.phase !== 'question' || !t || t.stage !== 'decided' || t.seq !== a.seq) return s;
       return confirm(s, a.now);
@@ -418,11 +404,6 @@ export function reducer(s: GameState, a: Action): GameState {
       let g: GameState = { ...s, history: [...s.history, core(s)].slice(-HISTORY_LIMIT), endgame: { reason: 'manual', round: s.round } };
       g = log(g, 'alert', 'أنهى المقدّم المباراة');
       return finalize(g, a.now);
-    }
-    case 'RELEASE_LEVEL': {
-      const ids = new Set(a.bankIds);
-      const g = { ...s, usedQuestionIds: s.usedQuestionIds.filter((id) => !ids.has(id)) };
-      return log(g, 'alert', `سمح المقدّم بإعادة استخدام أسئلة المستوى «${DIFFICULTY_LABEL[a.difficulty]}»`);
     }
   }
   return s;
@@ -491,6 +472,6 @@ export function freeze<T extends GameCore>(s: T, now: number): T {
 
 export function isValidGame(x: unknown): x is GameState {
   const g = x as GameState;
-  return !!g && g.version === 1 && Array.isArray(g.teams) && g.teams.length >= 2 && !!g.settings
-    && Array.isArray(g.usedQuestionIds) && Array.isArray(g.history) && typeof g.phase === 'string';
+  return !!g && g.version === 2 && Array.isArray(g.teams) && g.teams.length >= 2 && !!g.settings
+    && typeof g.questionCount === 'number' && Array.isArray(g.history) && typeof g.phase === 'string';
 }
