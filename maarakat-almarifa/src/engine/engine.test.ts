@@ -22,15 +22,19 @@ function reinforce(s: GameState, stake: Stake, correct: boolean): GameState {
   return run(s, { type: 'CONFIRM', seq: s.turn!.seq, now: NOW });
 }
 
-/** outcome: الفريق الفائز أو null للإخفاق */
-function confront(s: GameState, stake: Stake, oppId: string, outcome: 'init' | 'opp' | 'none'): GameState {
+/** fail: أخطأ المهاجم في سؤال الأسر. attacker/defender/none: نتيجة سؤال الاستنقاذ بعد أسر ناجح */
+function confront(s: GameState, stake: Stake, oppId: string, outcome: 'fail' | 'attacker' | 'defender' | 'none'): GameState {
   const initId = s.teams[s.currentIndex].id;
   s = run(s, { type: 'CHOOSE_MODE', mode: 'confront' });
   s = run(s, { type: 'START_TURN', stake, opponentId: oppId, now: NOW });
   s = run(s, { type: 'BEGIN', now: NOW });
-  if (outcome === 'init') s = run(s, { type: 'BUZZ', teamId: initId, now: NOW }, { type: 'MARK', result: 'correct', now: NOW });
-  if (outcome === 'opp') s = run(s, { type: 'BUZZ', teamId: initId, now: NOW }, { type: 'MARK', result: 'wrong', now: NOW }, { type: 'MARK', result: 'correct', now: NOW });
-  if (outcome === 'none') s = run(s, { type: 'BUZZ', teamId: oppId, now: NOW }, { type: 'MARK', result: 'wrong', now: NOW }, { type: 'MARK', result: 'timeout', now: NOW });
+  if (outcome === 'fail') s = run(s, { type: 'MARK', result: 'wrong', now: NOW });
+  else {
+    s = run(s, { type: 'MARK', result: 'correct', now: NOW }, { type: 'BEGIN', now: NOW });
+    if (outcome === 'attacker') s = run(s, { type: 'BUZZ', teamId: initId, now: NOW }, { type: 'MARK', result: 'correct', now: NOW });
+    if (outcome === 'defender') s = run(s, { type: 'BUZZ', teamId: initId, now: NOW }, { type: 'MARK', result: 'wrong', now: NOW }, { type: 'MARK', result: 'correct', now: NOW });
+    if (outcome === 'none') s = run(s, { type: 'BUZZ', teamId: oppId, now: NOW }, { type: 'MARK', result: 'wrong', now: NOW }, { type: 'MARK', result: 'timeout', now: NOW });
+  }
   return run(s, { type: 'CONFIRM', seq: s.turn!.seq, now: NOW });
 }
 
@@ -61,30 +65,57 @@ describe('التعزيزات', () => {
     const after = run(s, { type: 'START_TURN', stake: 20, now: NOW });
     expect(after).toBe(s);
   });
-  it('فوز ألف: ٦٠ وباء ٤٠ (تنتقل جنود المواجهة من باء إلى ألف)', () => {
-    const s = confront(createGame(settings(), NOW), 10, 't1', 'init');
+});
+
+describe('الهجوم: سؤال الأسر ثم سؤال الاستنقاذ (ألف ٥٠ يهاجم باء ٥٠ بـ١٠)', () => {
+  it('فشل سؤال الأسر: ألف ٤٠ وباء بلا تغيير', () => {
+    const s = confront(createGame(settings(), NOW), 10, 't1', 'fail');
+    expect(soldiers(s)).toEqual({ 'ألف': 40, 'باء': 50 });
+  });
+  it('سؤال الأسر للمهاجم وحده بمدة الإجابة العامة', () => {
+    let s = createGame(settings(), NOW);
+    s = run(s, { type: 'CHOOSE_MODE', mode: 'confront' }, { type: 'START_TURN', stake: 10, opponentId: 't1', now: NOW }, { type: 'BEGIN', now: NOW });
+    expect(s.turn!.step).toBe('capture');
+    expect(s.turn!.answeringTeamId).toBe('t0');
+    expect(s.turn!.timer!.durationMs).toBe(30_000);
+    s = run(s, { type: 'MARK', result: 'correct', now: NOW });
+    expect(s.turn!.step).toBe('rescue');
+    expect(s.turn!.stage).toBe('reading');
+    expect(s.turn!.contenders).toEqual(['t0', 't1']);
+    expect(s.turn!.questionNo).toBe(2);
+    expect(soldiers(s)).toEqual({ 'ألف': 50, 'باء': 50 }); // لا تتغير الأرصدة قبل الحسم
+  });
+  it('فوز المهاجم بالاستنقاذ: ألف ٦٠ وباء ٤٠', () => {
+    const s = confront(createGame(settings(), NOW), 10, 't1', 'attacker');
     expect(soldiers(s)).toEqual({ 'ألف': 60, 'باء': 40 });
     expect(s.teams[0].stats.confrontWins).toBe(1);
+    expect(s.teams[0].stats.correct).toBe(2);
   });
-  it('فوز المبادر على خصم رصيده أقل من جنود المواجهة: ينتقل ما لديه فقط', () => {
-    const e = computeEffect({ mode: 'confront', stake: 20, initiatorId: 'a', opponentId: 'b' }, 'a',
+  it('استنقاذ المدافع: باء بلا تغيير وألف يخسر ١٠', () => {
+    const s = confront(createGame(settings(), NOW), 10, 't1', 'defender');
+    expect(soldiers(s)).toEqual({ 'ألف': 40, 'باء': 50 });
+    expect(s.teams[1].stats.confrontWins).toBe(1);
+    expect(s.teams[0].stats.correct).toBe(1);
+  });
+  it('لم يُجب أحد في الاستنقاذ: يبقى الأسرى مع المهاجم', () => {
+    const s = confront(createGame(settings(), NOW), 10, 't1', 'none');
+    expect(soldiers(s)).toEqual({ 'ألف': 60, 'باء': 40 });
+  });
+  it('خصم رصيده أقل من جنود الهجوم: يُؤسر ما لديه فقط', () => {
+    const e = computeEffect({ mode: 'confront', step: 'rescue', stake: 20, initiatorId: 'a', opponentId: 'b' }, 'a',
       [{ id: 'a', name: 'أ', soldiers: 50 }, { id: 'b', name: 'ب', soldiers: 15 }] as never);
     expect(e.deltas).toEqual({ a: 15, b: -15 });
   });
-  it('فوز باء: ألف ٤٠ وباء +١٠', () => {
-    const s = confront(createGame(settings(), NOW), 10, 't1', 'opp');
-    expect(soldiers(s)).toEqual({ 'ألف': 40, 'باء': 60 });
-    expect(s.teams[1].stats.confrontWins).toBe(1);
+  it('لا يجوز مهاجمة جيش رصيده صفر', () => {
+    let s = createGame(settings(3, { startSoldiers: 5 }), NOW);
+    s = reinforce(s, 5, false); // ألف = ٠
+    expect(allowedOpponents(s, 't1')).toEqual(['t2']);
   });
-  it('إخفاق الفريقين: ألف ٤٠ وباء بلا تغيير', () => {
-    const s = confront(createGame(settings(), NOW), 10, 't1', 'none');
-    expect(soldiers(s)).toEqual({ 'ألف': 40, 'باء': 50 });
-  });
-  it('الأسبق يحصل على ٥ ثوانٍ ثم الآخر ١٠ ثوانٍ', () => {
+  it('في الاستنقاذ: الأسبق ٥ ثوانٍ ثم الآخر ١٠ ثوانٍ، ولا طلب قبل بدء السؤال', () => {
     let s = createGame(settings(), NOW);
-    s = run(s, { type: 'CHOOSE_MODE', mode: 'confront' });
-    s = run(s, { type: 'START_TURN', stake: 5, opponentId: 't1', now: NOW });
-    expect(run(s, { type: 'BUZZ', teamId: 't0', now: NOW })).toBe(s); // لا طلب إجابة قبل بدء المواجهة
+    s = run(s, { type: 'CHOOSE_MODE', mode: 'confront' }, { type: 'START_TURN', stake: 5, opponentId: 't1', now: NOW });
+    s = run(s, { type: 'BEGIN', now: NOW }, { type: 'MARK', result: 'correct', now: NOW });
+    expect(run(s, { type: 'BUZZ', teamId: 't0', now: NOW })).toBe(s);
     s = run(s, { type: 'BEGIN', now: NOW }, { type: 'BUZZ', teamId: 't1', now: NOW });
     expect(s.turn!.answeringTeamId).toBe('t1');
     expect(s.turn!.timer!.durationMs).toBe(5000);
@@ -92,13 +123,15 @@ describe('التعزيزات', () => {
     expect(s.turn!.answeringTeamId).toBe('t0');
     expect(s.turn!.timer!.durationMs).toBe(10000);
   });
-  it('مهلة طلب الإجابة دون أي طلب = إخفاق الفريقين', () => {
+  it('تصحيح التحكيم: إلغاء الأسر قبل الاستنقاذ، وتحويل خطأ الأسر إلى صحيح', () => {
     let s = createGame(settings(), NOW);
-    s = run(s, { type: 'CHOOSE_MODE', mode: 'confront' });
-    s = run(s, { type: 'START_TURN', stake: 5, opponentId: 't1', now: NOW }, { type: 'BEGIN', now: NOW });
-    s = run(s, { type: 'TIMEOUT', now: NOW + 30_000 });
+    s = run(s, { type: 'CHOOSE_MODE', mode: 'confront' }, { type: 'START_TURN', stake: 10, opponentId: 't1', now: NOW });
+    s = run(s, { type: 'BEGIN', now: NOW }, { type: 'MARK', result: 'correct', now: NOW }, { type: 'CANCEL_CAPTURE' });
+    expect(s.turn!.step).toBe('capture');
     expect(s.turn!.stage).toBe('decided');
-    expect(s.turn!.winnerId).toBeNull();
+    s = run(s, { type: 'SET_WINNER', winnerId: 't0' });
+    expect(s.turn!.step).toBe('rescue');
+    expect(s.turn!.stage).toBe('reading');
   });
   it('لا يجوز مواجهة النفس', () => {
     let s = createGame(settings(), NOW);
@@ -107,7 +140,7 @@ describe('التعزيزات', () => {
   });
   it('منع الخصم نفسه في مواجهتين متتاليتين عند ٣ فرق فأكثر', () => {
     let s = createGame(settings(3), NOW);
-    s = confront(s, 5, 't1', 'init');
+    s = confront(s, 5, 't1', 'attacker');
     s = reinforce(s, 5, true); // باء
     s = reinforce(s, 5, true); // جيم
     expect(allowedOpponents(s, 't0')).toEqual(['t2']);
@@ -116,14 +149,14 @@ describe('التعزيزات', () => {
   });
   it('مع فريقين فقط يُسمح بالخصم نفسه', () => {
     let s = createGame(settings(2), NOW);
-    s = confront(s, 5, 't1', 'init');
+    s = confront(s, 5, 't1', 'attacker');
     s = reinforce(s, 5, true);
     expect(allowedOpponents(s, 't0')).toEqual(['t1']);
   });
   it('استبدال السؤال يحافظ على الأرصدة ويرقّم السؤال البديل', () => {
     let s = createGame(settings(), NOW);
     s = run(s, { type: 'CHOOSE_MODE', mode: 'confront' });
-    s = run(s, { type: 'START_TURN', stake: 10, opponentId: 't1', now: NOW }, { type: 'BEGIN', now: NOW });
+    s = run(s, { type: 'START_TURN', stake: 10, opponentId: 't1', now: NOW });
     const oldNo = s.turn!.questionNo;
     s = run(s, { type: 'REPLACE_QUESTION' });
     expect(s.turn!.questionNo).toBe(oldNo + 1);
@@ -259,10 +292,11 @@ describe('التراجع', () => {
     const before = s;
     s = run(s, { type: 'CHOOSE_MODE', mode: 'confront' });
     s = run(s, { type: 'START_TURN', stake: 10, opponentId: 't0', now: NOW }, { type: 'BEGIN', now: NOW });
+    s = run(s, { type: 'MARK', result: 'correct', now: NOW }, { type: 'BEGIN', now: NOW });
     s = run(s, { type: 'BUZZ', teamId: 't0', now: NOW }, { type: 'MARK', result: 'correct', now: NOW });
     const decided = s;
     s = run(s, { type: 'CONFIRM', seq: s.turn!.seq, now: NOW });
-    expect(soldiers(s)).toEqual({ 'ألف': 70, 'باء': 40, 'جيم': 50 });
+    expect(soldiers(s)).toEqual({ 'ألف': 60, 'باء': 40, 'جيم': 50 });
     s = run(s, { type: 'UNDO' });
     expect(soldiers(s)).toEqual(soldiers(before));
     expect(s.currentIndex).toBe(1);
@@ -298,7 +332,7 @@ describe('ترقيم الأسئلة', () => {
     expect(s.turn!.questionNo).toBe(2);
     s = run(s, { type: 'REPLACE_QUESTION' });
     expect(s.turn!.questionNo).toBe(3);
-    s = run(s, { type: 'BEGIN', now: NOW }, { type: 'NO_BUZZ' });
+    s = run(s, { type: 'BEGIN', now: NOW }, { type: 'MARK', result: 'wrong', now: NOW });
     s = run(s, { type: 'CONFIRM', seq: s.turn!.seq, now: NOW });
     s = run(s, { type: 'UNDO' });
     expect(s.turn!.questionNo).toBe(3);

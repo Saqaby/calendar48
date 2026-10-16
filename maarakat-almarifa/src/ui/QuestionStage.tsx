@@ -5,7 +5,8 @@ import { DIFFICULTY_LABEL, GameState, TeamState } from '../engine/types';
 import { play } from '../audio';
 import { Delta, Emblem, Icon, useNow } from './common';
 
-const MODE_LABEL = { reinforce: 'مهمة تعزيزات', confront: 'مواجهة', refill: 'إعادة التعبئة', tiebreak: 'سؤال فاصل' } as const;
+const MODE_LABEL = { reinforce: 'مهمة تعزيزات', confront: 'هجوم', refill: 'إعادة التعبئة', tiebreak: 'سؤال فاصل' } as const;
+const STEP_LABEL = { capture: 'سؤال الأسر', rescue: 'سؤال الاستنقاذ' } as const;
 
 export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameState; paused: boolean }) {
   const { dispatch } = api;
@@ -33,6 +34,14 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
     if (!running) lastTick.current = null;
   }, [running, secLeft]);
 
+  /* صوت الانتقال إلى سؤال الاستنقاذ */
+  const stepKey = `${t.seq}-${t.step}`;
+  const prevStep = useRef(stepKey);
+  useEffect(() => {
+    if (prevStep.current !== stepKey && t.step === 'rescue') play('confront');
+    prevStep.current = stepKey;
+  }, [stepKey, t.step]);
+
   /* مفتاح المسافة لإيقاف المؤقّت واستئنافه */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -56,7 +65,7 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
   return (
     <div className={`question-stage mode-${t.mode} stage-${t.stage}`}>
       <div className="q-meta">
-        <span className={`chip mode-chip mode-${t.mode}`}>{MODE_LABEL[t.mode]}</span>
+        <span className={`chip mode-chip mode-${t.mode}`}>{MODE_LABEL[t.mode]}{t.step ? ` · ${STEP_LABEL[t.step]}` : ''}</span>
         <span className={`chip diff-${t.difficulty}`}>{DIFFICULTY_LABEL[t.difficulty]}</span>
         {t.stake > 0 && <span className="chip">{fmt(t.stake)} {t.stake === 20 ? 'جنديًا' : 'جنود'} في المهمة</span>}
         <span className="chip ghost-chip">السؤال رقم {fmt(t.questionNo)}</span>
@@ -66,7 +75,7 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
         {sides.map((s, i) => (
           <div key={s.id} className="q-side-wrap">
             {i > 0 && t.mode === 'confront' && <span className="vs">ضد</span>}
-            <div className={`q-side ${answering?.id === s.id ? 'answering' : ''} ${!t.contenders.includes(s.id) && t.stage !== 'decided' ? 'out' : ''} ${t.stage === 'decided' && t.winnerId === s.id ? 'winner' : ''}`}
+            <div className={`q-side ${answering?.id === s.id ? 'answering' : ''} ${t.stage !== 'decided' && t.attempts.some((x) => x.teamId === s.id && x.result !== 'correct') ? 'out' : ''} ${t.stage === 'decided' && t.winnerId === s.id ? 'winner' : ''}`}
               style={{ '--team': s.color } as CSSProperties}>
               <Emblem id={s.emblem} color={s.color} size={48} />
               <div><b>{s.name}</b><small>{fmt(s.soldiers)} جندي{s.id === t.initiatorId && t.mode === 'confront' ? ' · المبادر' : ''}</small></div>
@@ -75,9 +84,15 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
         ))}
       </div>
 
+      {t.step === 'rescue' && init && opp && (
+        <div className="captive-banner" role="status">
+          أسر <b>{init.name}</b> {fmt(Math.min(t.stake, opp.soldiers))} جنديًا من <b>{opp.name}</b> — الأسرع في الإجابة يحسم مصيرهم
+        </div>
+      )}
+
       <div className="q-body">
         <div className={`q-level diff-${t.difficulty}`}>
-          <span className="q-level-label">{t.mode === 'refill' ? 'سؤال إعادة التعبئة' : t.mode === 'tiebreak' ? 'سؤال فاصل' : 'سؤال'}</span>
+          <span className="q-level-label">{t.step ? STEP_LABEL[t.step] : t.mode === 'refill' ? 'سؤال إعادة التعبئة' : t.mode === 'tiebreak' ? 'سؤال فاصل' : 'سؤال'}</span>
           <span className="q-level-name">{DIFFICULTY_LABEL[t.difficulty]}</span>
           <span className="q-level-hint">{t.stage === 'reading' ? 'يقرأ المقدّم السؤال الآن' : t.stage === 'decided' ? 'انتهت الإجابة' : 'الإجابة جارية'}</span>
         </div>
@@ -89,12 +104,18 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
 
         {t.stage === 'reading' && (
           <div className="ctrl-row">
-            <p className="ctrl-hint">اقرأ سؤالًا {DIFFICULTY_LABEL[t.difficulty]} من الكتاب كاملًا، ثم ابدأ. {t.mode === 'confront' || t.mode === 'tiebreak' ? 'لا يُقبل طلب الإجابة قبل بدء المواجهة.' : ''}</p>
+            <p className="ctrl-hint">اقرأ سؤالًا {DIFFICULTY_LABEL[t.difficulty]} من الكتاب كاملًا، ثم ابدأ.
+              {t.step === 'capture' ? ` يجيب عنه ${init?.name} وحده.` : ''}
+              {t.step === 'rescue' || t.mode === 'tiebreak' ? ' لا يُقبل طلب الإجابة قبل بدء السؤال.' : ''}</p>
             <button className={`btn xl ${t.mode === 'confront' ? 'danger' : t.mode === 'tiebreak' ? 'gold' : 'primary'}`} disabled={paused}
               onClick={() => dispatch({ type: 'BEGIN', now: Date.now() })}>
-              {t.mode === 'confront' ? 'بدء المواجهة' : t.mode === 'tiebreak' ? 'بدء السؤال الفاصل' : `بدء المؤقّت (${fmt(game.settings.answerSeconds)} ث)`}
+              {t.step === 'rescue' ? 'بدء سؤال الاستنقاذ' : t.mode === 'tiebreak' ? 'بدء السؤال الفاصل'
+                : `${t.step === 'capture' ? 'بدء سؤال الأسر' : 'بدء المؤقّت'} (${fmt(game.settings.answerSeconds)} ث)`}
             </button>
             <button className="btn ghost" onClick={replace}><Icon name="swap" size={18} /> سؤال بديل</button>
+            {t.step === 'rescue' && (
+              <button className="btn ghost" onClick={() => dispatch({ type: 'CANCEL_CAPTURE' })}>تصحيح: إجابة الأسر كانت خاطئة</button>
+            )}
           </div>
         )}
 
@@ -116,7 +137,7 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
             </div>
             <div className="ctrl-secondary">
               <TimerToggle t={t} dispatch={dispatch} />
-              {t.attempts.length === 0 && t.mode === 'confront' && (
+              {t.attempts.length === 0 && t.step === 'rescue' && (
                 <button className="btn ghost" onClick={replace}><Icon name="swap" size={18} /> تعذّر تحديد الأسبق — سؤال بديل</button>
               )}
               <button className="btn ghost danger-text" onClick={() => dispatch({ type: 'NO_BUZZ' })}>لم يُجب أحد</button>
@@ -127,7 +148,7 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
         {t.stage === 'answering' && answering && (
           <div className="ctrl-row">
             <p className="ctrl-hint">يجيب الآن: <b style={{ color: `color-mix(in srgb, ${answering.color} 70%, #14213d)` }}>{answering.name}</b>
-              {t.mode === 'confront' || t.mode === 'tiebreak' ? ` — ${fmt(Math.round(t.timer!.durationMs / 1000))} ثوانٍ` : ''}</p>
+              {t.step === 'rescue' || t.mode === 'tiebreak' ? ` — ${fmt(Math.round(t.timer!.durationMs / 1000))} ثوانٍ` : ''}</p>
             <div className="judge-buttons">
               <button className="btn success xl" onClick={() => dispatch({ type: 'MARK', result: 'correct', now: Date.now() })}><Icon name="check" /> إجابة صحيحة</button>
               <button className="btn danger xl" onClick={() => dispatch({ type: 'MARK', result: 'wrong', now: Date.now() })}><Icon name="cross" /> إجابة خاطئة</button>
@@ -185,10 +206,13 @@ function Decision({ game, dispatch, confirming, onConfirm }: {
   const name = (id: string | null) => game.teams.find((x) => x.id === id)?.name ?? '';
   const effect = computeEffect(t, t.winnerId, game.teams);
   const options: { label: string; winner: string | null }[] =
-    t.mode === 'confront' ? [
-      { label: `فوز ${name(t.initiatorId)}`, winner: t.initiatorId },
-      { label: `فوز ${name(t.opponentId)}`, winner: t.opponentId },
-      { label: 'إخفاق الجيشين', winner: null },
+    t.step === 'capture' ? [
+      { label: 'إجابة الأسر صحيحة', winner: t.initiatorId },
+      { label: 'إجابة الأسر خاطئة', winner: null },
+    ] : t.step === 'rescue' ? [
+      { label: `حسمها ${name(t.initiatorId)}`, winner: t.initiatorId },
+      { label: `استنقذ ${name(t.opponentId)} جنوده`, winner: t.opponentId },
+      { label: 'لم يُجب أحد', winner: null },
     ] : t.mode === 'tiebreak' ? [
       ...game.tiebreakTeamIds.map((id) => ({ label: `فوز ${name(id)}`, winner: id as string | null })),
       { label: 'لا فائز', winner: null },

@@ -17,7 +17,7 @@ export interface Effect {
 
 /** أثر نتيجة الدور على الأرصدة. winnerId = الفريق الذي أجاب صحيحًا، أو null عند الإخفاق */
 export function computeEffect(
-  turn: Pick<Turn, 'mode' | 'stake' | 'initiatorId' | 'opponentId'>,
+  turn: Pick<Turn, 'mode' | 'stake' | 'initiatorId' | 'opponentId'> & { step?: Turn['step'] },
   winnerId: string | null,
   teams: TeamState[],
 ): Effect {
@@ -41,32 +41,31 @@ export function computeEffect(
       }
       return { deltas, positive: false, title: 'لم تنجح إعادة التعبئة', lines: [`${name(init)} ينتظر دوره التالي`] };
     case 'confront': {
-      // الجيش الذي يجيب صحيحًا يأخذ جنود المواجهة من الجيش الآخر
       const opp = turn.opponentId!;
-      if (winnerId === init) {
-        const taken = Math.min(s, soldiers(opp));
-        deltas[init!] = taken;
-        deltas[opp] = -taken;
-        return {
-          deltas, positive: true, title: 'حُسمت المعركة',
-          lines: taken > 0
-            ? [`${name(opp)} يخسر ${fmt(taken)} جنديًا`, `تنتقل إلى ${name(init)} فيكسب ${fmt(taken)} جنديًا`]
-            : [`${name(opp)} لا يملك جنودًا لتنتقل`, `${name(init)} لا يكسب شيئًا`],
-        };
-      }
       const lost = Math.min(s, soldiers(init));
-      deltas[init!] = -lost;
-      if (winnerId === opp) {
-        deltas[opp] = lost;
+      if (turn.step !== 'rescue') {
+        // أخطأ المهاجم في سؤال الأسر
+        deltas[init!] = -lost;
+        deltas[opp] = 0;
         return {
-          deltas, positive: false, title: 'حُسمت المعركة',
-          lines: [`${name(init)} يخسر ${fmt(lost)} جنديًا`, `تنتقل إلى ${name(opp)} فيكسب ${fmt(lost)} جنديًا`],
+          deltas, positive: false, title: 'فشل الهجوم',
+          lines: [`${name(init)} يخسر ${fmt(lost)} جنديًا`, `${name(opp)} لم يُمسّ`],
         };
       }
-      deltas[opp] = 0;
+      const captured = Math.min(s, soldiers(opp));
+      if (winnerId === opp) {
+        deltas[init!] = -lost;
+        deltas[opp] = 0;
+        return {
+          deltas, positive: false, title: 'استُنقذ الأسرى',
+          lines: [`${name(opp)} يستنقذ جنوده فلا ينقص رصيده`, `${name(init)} يخسر ${fmt(lost)} جنديًا في المعركة`],
+        };
+      }
+      deltas[init!] = captured;
+      deltas[opp] = -captured;
       return {
-        deltas, positive: false, title: 'أخفق الجيشان',
-        lines: [`${name(init)} يخسر ${fmt(lost)} جنديًا`, `${name(opp)} لا يحصل على شيء`],
+        deltas, positive: true, title: winnerId === init ? 'حُسمت المعركة' : 'لم يُستنقذ الأسرى',
+        lines: [`${name(init)} يضمّ ${fmt(captured)} جنديًا إلى جيشه`, `${name(opp)} يخسر ${fmt(captured)} جنديًا`],
       };
     }
     case 'tiebreak':
@@ -91,7 +90,7 @@ export function allowedStakes(soldiers: number): Stake[] {
 export function allowedOpponents(state: GameCore, initiatorId: string): string[] {
   const init = state.teams.find((t) => t.id === initiatorId);
   return state.teams
-    .filter((t) => t.id !== initiatorId)
+    .filter((t) => t.id !== initiatorId && t.soldiers > 0)
     .filter((t) => !(state.teams.length >= 3 && init?.lastOpponentId === t.id))
     .map((t) => t.id);
 }
@@ -191,10 +190,11 @@ function teamName(s: GameCore, id: string | null) {
 
 function newTurn(
   s: GameState,
-  partial: Pick<Turn, 'mode' | 'stake' | 'difficulty' | 'initiatorId' | 'opponentId' | 'contenders'>,
+  partial: Pick<Turn, 'mode' | 'stake' | 'difficulty' | 'initiatorId' | 'opponentId' | 'contenders'> & { step?: Turn['step'] },
 ): GameState {
   const seq = s.turnSeq + 1;
   const turn: Turn = {
+    step: null,
     ...partial,
     seq,
     questionNo: s.questionCount + 1,
@@ -221,15 +221,31 @@ function withTurn(s: GameState, patch: Partial<Turn>): GameState {
 }
 
 /** تسجيل محاولة إجابة للفريق الذي يجيب حاليًا */
+/** نجح المهاجم في سؤال الأسر: يبدأ سؤال الاستنقاذ للفريقين */
+function enterRescue(s: GameState): GameState {
+  const t = s.turn!;
+  const count = s.questionCount + 1;
+  const captured = Math.min(t.stake, s.teams.find((x) => x.id === t.opponentId)?.soldiers ?? 0);
+  const g: GameState = {
+    ...withTurn(s, {
+      step: 'rescue', stage: 'reading', contenders: [t.initiatorId!, t.opponentId!], attempts: [],
+      answeringTeamId: null, winnerId: null, timer: null, questionNo: count,
+    }),
+    questionCount: count,
+  };
+  return log(g, 'confront', `${teamName(s, t.initiatorId)} أسر ${fmt(captured)} جنديًا من ${teamName(s, t.opponentId)} — سؤال الاستنقاذ`);
+}
+
 function applyAttempt(s: GameState, result: AttemptResult, now: number): GameState {
   const t = s.turn!;
   const teamId = t.answeringTeamId!;
   const attempts = [...t.attempts, { teamId, result }];
+  if (result === 'correct' && t.step === 'capture') return enterRescue(s);
   if (result === 'correct') {
     return withTurn(s, { attempts, stage: 'decided', winnerId: teamId, timer: null, answeringTeamId: null });
   }
   const contenders = t.contenders.filter((c) => c !== teamId);
-  if (t.mode === 'reinforce' || t.mode === 'refill' || contenders.length === 0) {
+  if (t.mode === 'reinforce' || t.mode === 'refill' || t.step === 'capture' || contenders.length === 0) {
     return withTurn(s, { attempts, contenders, stage: 'decided', winnerId: null, timer: null, answeringTeamId: null });
   }
   if (contenders.length === 1) {
@@ -300,11 +316,11 @@ export function reducer(s: GameState, a: Action): GameState {
       if (s.pendingMode === 'confront') {
         if (!a.opponentId || !allowedOpponents(s, team.id).includes(a.opponentId)) return s;
         let g = newTurn(s, {
-          mode: 'confront', stake: a.stake, difficulty, initiatorId: team.id, opponentId: a.opponentId,
-          contenders: [team.id, a.opponentId],
+          mode: 'confront', step: 'capture', stake: a.stake, difficulty, initiatorId: team.id, opponentId: a.opponentId,
+          contenders: [team.id],
         });
         g = { ...g, teams: g.teams.map((x) => (x.id === team.id ? { ...x, lastOpponentId: a.opponentId! } : x)) };
-        return log(g, 'confront', `استعدوا للمواجهة: ${team.name} ضد ${teamName(s, a.opponentId)} بـ${fmt(a.stake)} جنود (${DIFFICULTY_LABEL[difficulty]})`);
+        return log(g, 'confront', `استعدوا للمواجهة: ${team.name} يهاجم ${teamName(s, a.opponentId)} بـ${fmt(a.stake)} جنود (${DIFFICULTY_LABEL[difficulty]}) — سؤال الأسر`);
       }
       const g = newTurn(s, {
         mode: 'reinforce', stake: a.stake, difficulty, initiatorId: team.id, opponentId: null, contenders: [team.id],
@@ -336,7 +352,7 @@ export function reducer(s: GameState, a: Action): GameState {
     }
     case 'BEGIN': {
       if (s.phase !== 'question' || !t || t.stage !== 'reading') return s;
-      if (t.mode === 'reinforce' || t.mode === 'refill') {
+      if (t.mode === 'reinforce' || t.mode === 'refill' || t.step === 'capture') {
         return withTurn(s, {
           stage: 'answering', answeringTeamId: t.initiatorId, timer: startTimer(s.settings.answerSeconds * 1000, a.now),
         });
@@ -374,11 +390,21 @@ export function reducer(s: GameState, a: Action): GameState {
     }
     case 'SET_WINNER': {
       if (s.phase !== 'question' || !t || t.stage !== 'decided') return s;
+      // تصحيح سؤال الأسر إلى «صحيحة» ينقل إلى سؤال الاستنقاذ
+      if (t.step === 'capture') return a.winnerId === t.initiatorId ? enterRescue(s) : s;
       const valid = a.winnerId === null || (t.mode === 'tiebreak'
         ? s.tiebreakTeamIds.includes(a.winnerId)
         : a.winnerId === t.initiatorId || a.winnerId === t.opponentId);
       if (!valid) return s;
       return withTurn(s, { winnerId: a.winnerId, overridden: true });
+    }
+    case 'CANCEL_CAPTURE': {
+      // تصحيح قبل بدء الاستنقاذ: إجابة الأسر كانت خاطئة
+      if (s.phase !== 'question' || !t || t.step !== 'rescue' || t.attempts.length > 0 || t.stage === 'answering' || t.stage === 'decided') return s;
+      const g = withTurn(s, {
+        step: 'capture', stage: 'decided', contenders: [], winnerId: null, timer: null, answeringTeamId: null, overridden: true,
+      });
+      return log(g, 'info', 'صحّح المقدّم: إجابة سؤال الأسر خاطئة');
     }
     case 'CONFIRM': {
       if (s.phase !== 'question' || !t || t.stage !== 'decided' || t.seq !== a.seq) return s;
@@ -419,8 +445,9 @@ function confirm(s: GameState, now: number): GameState {
   const effect = computeEffect(t, t.winnerId, s.teams);
   const teams = s.teams.map((team) => {
     const d = effect.deltas[team.id] ?? 0;
-    const correct = t.winnerId === team.id ? 1 : 0;
-    const confrontWin = t.mode === 'confront' && t.winnerId === team.id ? 1 : 0;
+    const correct = (t.winnerId === team.id ? 1 : 0) + (t.step === 'rescue' && team.id === t.initiatorId ? 1 : 0);
+    const confrontWinner = t.step === 'rescue' ? (t.winnerId === t.opponentId ? t.opponentId : t.initiatorId) : null;
+    const confrontWin = confrontWinner === team.id ? 1 : 0;
     const isActor = team.id === t.initiatorId;
     return {
       ...team,

@@ -259,8 +259,8 @@ function TurnPanel({ api, game }: { api: AppApi; game: GameState }) {
             <span className="action-sub">أجيبوا وحدكم واكسبوا جنودًا</span>
           </button>
           <button className="btn action confront" onClick={() => dispatch({ type: 'CHOOSE_MODE', mode: 'confront' })}>
-            <span className="action-title">بدء مواجهة</span>
-            <span className="action-sub">تحدّي سرعة ضد جيش منافس</span>
+            <span className="action-title">شنّ هجوم</span>
+            <span className="action-sub">خذوا أسرى من جيش منافس</span>
           </button>
         </div>
       </div>
@@ -281,13 +281,13 @@ function TurnPanel({ api, game }: { api: AppApi; game: GameState }) {
     <div className={`turn-panel mode-${mode}`} style={style}>
       <div className="mission-head">
         <button className="btn ghost sm" onClick={() => dispatch({ type: 'BACK_TO_ACTION' })}>رجوع</button>
-        <h2>{mode === 'reinforce' ? 'طلب تعزيزات' : 'بدء مواجهة'} — {team.name}</h2>
+        <h2>{mode === 'reinforce' ? 'طلب تعزيزات' : 'شنّ هجوم'} — {team.name}</h2>
         <span className="chip">{fmt(team.soldiers)} جندي</span>
       </div>
 
       {mode === 'confront' && (
         <div className="step">
-          <h3><span className="step-num">١</span> اختاروا الجيش المنافس</h3>
+          <h3><span className="step-num">١</span> اختاروا الجيش الذي ستهاجمونه</h3>
           <div className="opponents">
             {game.teams.filter((t) => t.id !== team.id).map((t) => {
               const ok = opps.includes(t.id);
@@ -296,7 +296,7 @@ function TurnPanel({ api, game }: { api: AppApi; game: GameState }) {
                   style={{ '--team': t.color } as CSSProperties} onClick={() => setOpponentId(t.id)} aria-pressed={opponentId === t.id}>
                   <Emblem id={t.emblem} color={t.color} size={44} />
                   <span className="opp-name">{t.name}</span>
-                  <span className="opp-sub">{ok ? `${fmt(t.soldiers)} جندي` : 'واجهتموه في مواجهتكم السابقة'}</span>
+                  <span className="opp-sub">{ok ? `${fmt(t.soldiers)} جندي` : t.soldiers === 0 ? 'لا جنود لأسرهم' : 'هاجمتموه في هجومكم السابق'}</span>
                 </button>
               );
             })}
@@ -342,14 +342,20 @@ function TurnPanel({ api, game }: { api: AppApi; game: GameState }) {
 }
 
 function OutcomeTable({ game, stake, initiator, opponent }: { game: GameState; stake: number; initiator: TeamState; opponent: TeamState }) {
-  const turn = { mode: 'confront' as const, stake, initiatorId: initiator.id, opponentId: opponent.id };
-  const rows: [string, string | null][] = [[`فوز ${initiator.name}`, initiator.id], [`فوز ${opponent.name}`, opponent.id], ['إخفاق الجيشين', null]];
+  const base = { mode: 'confront' as const, stake, initiatorId: initiator.id, opponentId: opponent.id };
+  const rows: [string, 'capture' | 'rescue', string | null][] = [
+    [`أخطأ ${initiator.name} في سؤال الأسر`, 'capture', null],
+    [`أسر ثم حسمها ${initiator.name} في الاستنقاذ (أو لم يُجب أحد)`, 'rescue', initiator.id],
+    [`أسر ثم استنقذ ${opponent.name} جنوده`, 'rescue', opponent.id],
+  ];
   return (
+    <>
+    <p className="flow-note">١) سؤال الأسر لـ{initiator.name} وحده. ٢) إن أصاب: سؤال الاستنقاذ للجيشين، والأسرع يحسم.</p>
     <table className="table outcome-table">
       <thead><tr><th>النتيجة</th><th>رصيد {initiator.name}</th><th>التغيير في {opponent.name}</th></tr></thead>
       <tbody>
-        {rows.map(([label, w]) => {
-          const e = computeEffect(turn, w, game.teams);
+        {rows.map(([label, step, w]) => {
+          const e = computeEffect({ ...base, step }, w, game.teams);
           return (
             <tr key={label}>
               <td>{label}</td>
@@ -360,6 +366,7 @@ function OutcomeTable({ game, stake, initiator, opponent }: { game: GameState; s
         })}
       </tbody>
     </table>
+    </>
   );
 }
 

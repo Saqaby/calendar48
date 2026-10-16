@@ -47,6 +47,8 @@ export interface TeamState extends TeamConfig {
 
 export type TurnMode = 'reinforce' | 'confront' | 'refill' | 'tiebreak';
 export type Stage = 'reading' | 'buzz' | 'answering' | 'decided';
+/** مرحلتا الهجوم: سؤال الأسر للمهاجم وحده، ثم سؤال الاستنقاذ للفريقين */
+export type ConfrontStep = 'capture' | 'rescue';
 export type AttemptResult = 'correct' | 'wrong' | 'timeout';
 
 export interface TimerState {
@@ -59,6 +61,8 @@ export interface TimerState {
 export interface Turn {
   seq: number;
   mode: TurnMode;
+  /** في المواجهة فقط؛ null لغيرها */
+  step: ConfrontStep | null;
   stake: number;
   difficulty: Difficulty;
   /** null في الأسئلة الفاصلة */
@@ -141,6 +145,7 @@ export type Action =
   | { type: 'PAUSE_TIMER'; now: number }
   | { type: 'RESUME_TIMER'; now: number }
   | { type: 'SET_WINNER'; winnerId: string | null }
+  | { type: 'CANCEL_CAPTURE' }
   | { type: 'CONFIRM'; seq: number; now: number }
   | { type: 'UNDO' }
   | { type: 'CLOCK_PAUSE'; now: number }

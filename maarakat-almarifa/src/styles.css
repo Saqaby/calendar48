@@ -299,7 +299,7 @@ html.projector .backdrop .topo { opacity: .3; }
 .mission:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--ink); }
 .mission.on { background: var(--sun-soft); outline: 4px solid var(--ink); }
 .mission:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; }
-.mission-stake { font-family: var(--display); font-size: 3rem; line-height: 1.1; margin-top: 6px; }
+.mission-stake { font-family: var(--display); font-size: 2.6rem; line-height: 1.1; margin-top: 6px; }
 .mission-unit { color: var(--ink-2); font-weight: 800; }
 .mission-preview { display: flex; gap: 12px; font-weight: 800; font-size: 1rem; }
 .mission-preview .good { color: var(--grass); } .mission-preview .bad { color: var(--tomato); }
@@ -343,6 +343,8 @@ html.projector .backdrop .topo { opacity: .3; }
 .q-side.answering { background: color-mix(in srgb, var(--team) 22%, var(--paper)); transform: scale(1.06) rotate(-1deg); box-shadow: 6px 6px 0 var(--ink); }
 .q-side.out { opacity: .4; }
 .q-side.winner { background: var(--sun); }
+.captive-banner { align-self: center; background: var(--tomato-soft); border: var(--edge); border-radius: 12px; padding: 6px 18px; font-size: 1.25rem; font-weight: 800; box-shadow: var(--pop-sm); text-align: center; }
+.flow-note { font-size: .95rem; font-weight: 800; background: var(--paper-2); border: 2px dashed var(--ink); border-radius: 10px; padding: 6px 12px; }
 .q-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: center; min-height: 180px; }
 @media (max-width: 800px) { .q-body { grid-template-columns: 1fr; justify-items: center; } }
 .q-level { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
@@ -351,6 +353,9 @@ html.projector .backdrop .topo { opacity: .3; }
 .q-level.diff-easy .q-level-name { color: var(--grass); }
 .q-level.diff-medium .q-level-name { color: var(--sun); }
 .q-level.diff-hard .q-level-name { color: var(--tomato); }
+.question-stage.stage-decided .q-body { min-height: 0; }
+.question-stage.stage-decided .q-level-name { font-size: clamp(2.6rem, 5vw, 4.4rem); text-shadow: 4px 4px 0 var(--ink); -webkit-text-stroke-width: 2px; }
+.question-stage.stage-decided .q-level-label { font-size: 1.4rem; }
 .q-level-hint { color: var(--ink-2); font-size: 1.2rem; font-weight: 700; }
 
 .timer-ring { position: relative; width: clamp(140px, 14vw, 220px); aspect-ratio: 1; max-width: 100%; display: grid; place-items: center; }
