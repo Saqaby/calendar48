@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
+import saqeelLogo from '../assets/saqeel-logo-horizontal.png';
 
 /* ---------------- الشعارات الخيالية ---------------- */
 
@@ -169,4 +170,19 @@ export function formatClock(ms: number) {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${m.toLocaleString('ar-EG')}:${s.toLocaleString('ar-EG', { minimumIntegerDigits: 2 })}`;
+}
+
+/* ---------------- تذييل الجهة المنفّذة ---------------- */
+
+/** يمكن إخفاؤه في بناء خاص بضبط VITE_HIDE_CREDIT=1 */
+export const SHOW_CREDIT = import.meta.env.VITE_HIDE_CREDIT !== '1';
+
+export function Credit() {
+  if (!SHOW_CREDIT) return null;
+  return (
+    <footer className="credit">
+      <span className="credit-text">من إعداد وتنفيذ</span>
+      <img className="credit-logo" src={saqeelLogo} alt="جمعية صقيل لتنمية الشباب" width={176} height={60} />
+    </footer>
+  );
 }

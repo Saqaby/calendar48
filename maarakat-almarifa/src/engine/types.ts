@@ -1,8 +1,10 @@
 export type Difficulty = 'easy' | 'medium' | 'hard';
-export type Stake = 5 | 10 | 20;
+/** عدد الجنود الذي يراهن به الجيش أو يهاجم به: من ١ حتى رصيده */
+export type Stake = number;
 
-export const STAKES: Stake[] = [5, 10, 20];
-export const STAKE_DIFFICULTY: Record<Stake, Difficulty> = { 5: 'easy', 10: 'medium', 20: 'hard' };
+/** الحدود الافتراضية لمستوى السؤال: ١–١٠ سهل، ١١–٥٠ متوسط، ٥١ فأكثر صعب */
+export const DEFAULT_EASY_MAX = 10;
+export const DEFAULT_MEDIUM_MAX = 50;
 export const DIFFICULTY_LABEL: Record<Difficulty, string> = { easy: 'سهل', medium: 'متوسط', hard: 'صعب' };
 
 /** مدة الإجابة للفريق الأسبق في المواجهة، ثم فرصة الفريق الآخر */
@@ -25,9 +27,14 @@ export interface Settings {
   teams: TeamConfig[];
   startSoldiers: number;
   winTarget: number;
-  answerSeconds: number;
+  /** null = بدون وقت: لا مؤقّتات في الإجابة ولا في طلب الإجابة */
+  answerSeconds: number | null;
+  /** أعلى عدد جنود لسؤال سهل، ثم لسؤال متوسط؛ ما فوقه صعب */
+  easyMax: number;
+  mediumMax: number;
   orderMode: 'manual' | 'random';
-  endMode: 'target' | 'time';
+  /** open = مفتوحة دون رصيد فوز؛ تنتهي حين ينهيها المقدّم */
+  endMode: 'target' | 'time' | 'open';
   matchMinutes: number;
 }
 

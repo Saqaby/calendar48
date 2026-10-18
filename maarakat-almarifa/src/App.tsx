@@ -3,7 +3,7 @@ import { createGame, reducer } from './engine/engine';
 import { Action, GameState, Settings } from './engine/types';
 import { loadGame, loadPrefs, loadSettings, saveGame, savePrefs, saveSettings } from './storage';
 import { play, setMuted, unlockAudio } from './audio';
-import { ConfirmDialog, ConfirmRequest, Icon } from './ui/common';
+import { ConfirmDialog, ConfirmRequest, Credit, Icon } from './ui/common';
 import { Home } from './ui/Home';
 import { Setup } from './ui/Setup';
 import { GameScreen } from './ui/GameScreen';
@@ -105,6 +105,8 @@ export default function App() {
       {screen === 'game' && game && <GameScreen api={api} game={game} />}
       {screen === 'game' && !game && <Home api={api} />}
       {screen === 'rules' && <Rules api={api} />}
+
+      {(screen !== 'game' || !game || game.phase === 'finished') && <Credit />}
 
       {confirmReq && <ConfirmDialog req={confirmReq} onClose={() => setConfirmReq(null)} />}
     </div>

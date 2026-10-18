@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { AppApi } from '../App';
-import { Settings, TeamConfig } from '../engine/types';
+import { DEFAULT_EASY_MAX, DEFAULT_MEDIUM_MAX, Settings, TeamConfig } from '../engine/types';
 import { Emblem, EMBLEMS, Icon, TEAM_COLORS } from './common';
 
 const DEFAULT_NAMES = ['فيلق الصقور', 'فيلق البرق', 'فيلق الجبال', 'فيلق النجوم', 'فيلق القلاع', 'فيلق الشعلة'];
@@ -15,13 +15,15 @@ export const DEFAULT_SETTINGS: Settings = {
   startSoldiers: 50,
   winTarget: 200,
   answerSeconds: 30,
+  easyMax: DEFAULT_EASY_MAX,
+  mediumMax: DEFAULT_MEDIUM_MAX,
   orderMode: 'manual',
   endMode: 'target',
   matchMinutes: 30,
 };
 
 export function Setup({ api, initial }: { api: AppApi; initial: Settings | null }) {
-  const [s, setS] = useState<Settings>(() => initial ?? DEFAULT_SETTINGS);
+  const [s, setS] = useState<Settings>(() => ({ ...DEFAULT_SETTINGS, ...(initial ?? {}) }));
   const [picker, setPicker] = useState<number | null>(null);
   const set = (patch: Partial<Settings>) => setS((x) => ({ ...x, ...patch }));
   const setTeam = (i: number, patch: Partial<TeamConfig>) =>
@@ -55,9 +57,10 @@ export function Setup({ api, initial }: { api: AppApi; initial: Settings | null 
   const names = s.teams.map((t) => t.name.trim());
   if (names.some((n) => !n)) errors.push('اكتب اسمًا لكل جيش.');
   if (new Set(names).size !== names.length) errors.push('أسماء الجيوش يجب أن تكون مختلفة.');
-  if (!Number.isFinite(s.startSoldiers) || s.startSoldiers < 5 || s.startSoldiers % 5 !== 0) errors.push('عدد الجنود عند البداية يجب أن يكون من مضاعفات ٥ (٥ فأكثر).');
+  if (!Number.isInteger(s.startSoldiers) || s.startSoldiers < 1) errors.push('عدد الجنود عند البداية عدد صحيح من ١ فأكثر.');
   if (s.endMode === 'target' && !(s.winTarget > s.startSoldiers)) errors.push('رصيد الفوز يجب أن يكون أكبر من عدد الجنود عند البداية.');
-  if (!(s.answerSeconds >= 5 && s.answerSeconds <= 300)) errors.push('مدة الإجابة بين ٥ و٣٠٠ ثانية.');
+  if (s.answerSeconds !== null && !(s.answerSeconds >= 5 && s.answerSeconds <= 300)) errors.push('مدة الإجابة بين ٥ و٣٠٠ ثانية، أو اختر «بدون وقت».');
+  if (!(Number.isInteger(s.easyMax) && s.easyMax >= 1 && Number.isInteger(s.mediumMax) && s.mediumMax > s.easyMax)) errors.push('حدود المستويات: الحد الأعلى للمتوسط يجب أن يكون أكبر من الحد الأعلى للسهل.');
   if (s.endMode === 'time' && !(s.matchMinutes >= 1 && s.matchMinutes <= 300)) errors.push('مدة المباراة بين ١ و٣٠٠ دقيقة.');
   const warnings: string[] = [];
   if (new Set(s.teams.map((t) => t.color)).size !== s.teams.length) warnings.push('بعض الجيوش تحمل اللون نفسه؛ يُفضّل التمييز بينها.');
@@ -138,16 +141,18 @@ export function Setup({ api, initial }: { api: AppApi; initial: Settings | null 
           <h2>قواعد الاشتباك</h2>
           <label className="field">
             <span>عدد الجنود عند البداية</span>
-            <input className="input" type="number" min={5} step={5} value={Number.isNaN(s.startSoldiers) ? '' : s.startSoldiers} onChange={(e) => set({ startSoldiers: num(e.target.value) })} />
+            <input className="input" type="number" min={1} step={1} value={Number.isNaN(s.startSoldiers) ? '' : s.startSoldiers} onChange={(e) => set({ startSoldiers: num(e.target.value) })} />
           </label>
           <fieldset className="field">
             <legend>نهاية المباراة</legend>
             <div className="seg">
               <button className={s.endMode === 'target' ? 'on' : ''} onClick={() => set({ endMode: 'target' })}>حتى رصيد الفوز</button>
               <button className={s.endMode === 'time' ? 'on' : ''} onClick={() => set({ endMode: 'time' })}>لمدة محددة</button>
+              <button className={s.endMode === 'open' ? 'on' : ''} onClick={() => set({ endMode: 'open' })}>مفتوحة</button>
             </div>
+            {s.endMode === 'open' && <small className="muted">لا رصيد فوز محدد. تستمر المباراة حتى يضغط المقدّم «إنهاء»، فيفوز الأعلى رصيدًا.</small>}
           </fieldset>
-          {s.endMode === 'target' ? (
+          {s.endMode === 'open' ? null : s.endMode === 'target' ? (
             <label className="field">
               <span>رصيد الفوز (جنود)</span>
               <input className="input" type="number" min={10} step={5} value={Number.isNaN(s.winTarget) ? '' : s.winTarget} onChange={(e) => set({ winTarget: num(e.target.value) })} />
@@ -158,11 +163,29 @@ export function Setup({ api, initial }: { api: AppApi; initial: Settings | null 
               <input className="input" type="number" min={1} max={300} value={Number.isNaN(s.matchMinutes) ? '' : s.matchMinutes} onChange={(e) => set({ matchMinutes: num(e.target.value) })} />
             </label>
           )}
-          <label className="field">
-            <span>مدة الإجابة في التعزيزات (ثوانٍ)</span>
-            <input className="input" type="number" min={5} max={300} value={Number.isNaN(s.answerSeconds) ? '' : s.answerSeconds} onChange={(e) => set({ answerSeconds: num(e.target.value) })} />
-            <small className="muted">وهي أيضًا مهلة طلب الإجابة في المواجهة. بعد الطلب: ٥ ثوانٍ للأسبق، ثم ١٠ للآخر.</small>
-          </label>
+          <fieldset className="field">
+            <legend>مدة الإجابة</legend>
+            <div className="seg">
+              <button className={s.answerSeconds !== null ? 'on' : ''} onClick={() => set({ answerSeconds: s.answerSeconds ?? 30 })}>بالثواني</button>
+              <button className={s.answerSeconds === null ? 'on' : ''} onClick={() => set({ answerSeconds: null })}>بدون وقت</button>
+            </div>
+            {s.answerSeconds !== null ? (
+              <>
+                <input className="input" type="number" min={5} max={300} value={Number.isNaN(s.answerSeconds) ? '' : s.answerSeconds} onChange={(e) => set({ answerSeconds: num(e.target.value) })} aria-label="مدة الإجابة بالثواني" />
+                <small className="muted">للتعزيزات وسؤال الأسر، وهي أيضًا مهلة طلب الإجابة في الاستنقاذ. بعد الطلب: ٥ ثوانٍ للأسبق ثم ١٠ للآخر.</small>
+              </>
+            ) : <small className="muted">لا تظهر أي مؤقّتات؛ يحكم المقدّم متى تنتهي الإجابة.</small>}
+          </fieldset>
+          <fieldset className="field">
+            <legend>مستوى السؤال بحسب عدد الجنود</legend>
+            <div className="level-ranges">
+              <span className="range-chip diff-easy">سهل: ١ إلى</span>
+              <input className="input sm-num" type="number" min={1} value={Number.isNaN(s.easyMax) ? '' : s.easyMax} onChange={(e) => set({ easyMax: num(e.target.value) })} aria-label="أعلى عدد لسؤال سهل" />
+              <span className="range-chip diff-medium">متوسط: حتى</span>
+              <input className="input sm-num" type="number" min={2} value={Number.isNaN(s.mediumMax) ? '' : s.mediumMax} onChange={(e) => set({ mediumMax: num(e.target.value) })} aria-label="أعلى عدد لسؤال متوسط" />
+              <span className="range-chip diff-hard">صعب: ما فوق ذلك</span>
+            </div>
+          </fieldset>
           <fieldset className="field">
             <legend>ترتيب الأدوار</legend>
             <div className="seg">
@@ -171,7 +194,7 @@ export function Setup({ api, initial }: { api: AppApi; initial: Settings | null 
             </div>
           </fieldset>
 
-          <p className="bank-summary muted">الأسئلة يطرحها المقدّم من كتابه. تعرض اللعبة مستوى كل سؤال (٥ جنود = سهل، ١٠ = متوسط، ٢٠ = صعب) ورقمه المتسلسل.</p>
+          <p className="bank-summary muted">الأسئلة يطرحها المقدّم من كتابه. في كل دور يحدّد الجيش عدد الجنود بحرية، وتعرض اللعبة مستوى السؤال المطلوب ورقمه المتسلسل.</p>
 
           {errors.length > 0 && <ul className="form-errors" role="alert">{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
           {warnings.length > 0 && <ul className="form-warnings">{warnings.map((e) => <li key={e}>{e}</li>)}</ul>}

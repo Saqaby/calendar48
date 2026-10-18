@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allowedOpponents, computeEffect, createGame, freeze, reducer, timerRemaining } from './engine';
+import { allowedOpponents, computeEffect, createGame, difficultyFor, freeze, reducer, timerRemaining } from './engine';
 import { Action, GameState, Settings, Stake } from './types';
 
 const NOW = 1_000_000;
@@ -8,7 +8,7 @@ function settings(n = 2, patch: Partial<Settings> = {}): Settings {
   const names = ['ألف', 'باء', 'جيم', 'دال', 'هاء', 'واو'];
   return {
     teams: names.slice(0, n).map((name, i) => ({ id: `t${i}`, name, color: '#fff', emblem: 'star' })),
-    startSoldiers: 50, winTarget: 200, answerSeconds: 30, orderMode: 'manual', endMode: 'target', matchMinutes: 20,
+    startSoldiers: 50, winTarget: 200, answerSeconds: 30, easyMax: 10, mediumMax: 50, orderMode: 'manual', endMode: 'target', matchMinutes: 20,
     ...patch,
   };
 }
@@ -338,6 +338,57 @@ describe('ترقيم الأسئلة', () => {
     expect(s.turn!.questionNo).toBe(3);
     s = run(s, { type: 'UNDO' });
     expect(s.questionCount).toBe(1);
+  });
+});
+
+describe('العدد الحر والمستوى والإعدادات المفتوحة', () => {
+  it('المستوى بحسب العدد: ١–١٠ سهل، ١١–٥٠ متوسط، ٥١ فأكثر صعب', () => {
+    const st = { easyMax: 10, mediumMax: 50 };
+    expect([1, 10, 11, 50, 51, 300].map((n) => difficultyFor(n, st))).toEqual(['easy', 'easy', 'medium', 'medium', 'hard', 'hard']);
+    expect(difficultyFor(25, { easyMax: 10, mediumMax: 30 })).toBe('medium');
+    expect(difficultyFor(31, { easyMax: 10, mediumMax: 30 })).toBe('hard');
+  });
+  it('يقبل أي عدد صحيح من ١ حتى الرصيد ويرفض غيره', () => {
+    let s = createGame(settings(), NOW);
+    s = run(s, { type: 'CHOOSE_MODE', mode: 'reinforce' });
+    for (const bad of [0, -3, 51, 7.5]) expect(run(s, { type: 'START_TURN', stake: bad, now: NOW })).toBe(s);
+    const t = run(s, { type: 'START_TURN', stake: 37, now: NOW });
+    expect(t.turn!.stake).toBe(37);
+    expect(t.turn!.difficulty).toBe('medium');
+    const all = run(s, { type: 'START_TURN', stake: 50, now: NOW });
+    expect(all.turn!.stake).toBe(50);
+  });
+  it('رهان ٣٧ صحيح: ٥٠ ← ٨٧، وخاطئ: ٥٠ ← ١٣', () => {
+    expect(reinforce(createGame(settings(), NOW), 37, true).teams[0].soldiers).toBe(87);
+    expect(reinforce(createGame(settings(), NOW), 37, false).teams[0].soldiers).toBe(13);
+  });
+  it('رصيد غير مضاعف للخمسة يبقى قابلًا للعب', () => {
+    let s = createGame(settings(2, { startSoldiers: 3 }), NOW);
+    s = run(s, { type: 'CHOOSE_MODE', mode: 'reinforce' }, { type: 'START_TURN', stake: 3, now: NOW });
+    expect(s.turn!.stake).toBe(3);
+  });
+  it('بدون وقت: لا مؤقّتات في الإجابة ولا في الاستنقاذ', () => {
+    let s = createGame(settings(2, { answerSeconds: null }), NOW);
+    s = run(s, { type: 'CHOOSE_MODE', mode: 'confront' }, { type: 'START_TURN', stake: 10, opponentId: 't1', now: NOW }, { type: 'BEGIN', now: NOW });
+    expect(s.turn!.stage).toBe('answering');
+    expect(s.turn!.timer).toBeNull();
+    expect(run(s, { type: 'TIMEOUT', now: NOW + 999_999 })).toBe(s);
+    s = run(s, { type: 'MARK', result: 'correct', now: NOW }, { type: 'BEGIN', now: NOW });
+    expect(s.turn!.timer).toBeNull();
+    s = run(s, { type: 'BUZZ', teamId: 't1', now: NOW });
+    expect(s.turn!.timer).toBeNull();
+    s = run(s, { type: 'MARK', result: 'wrong', now: NOW });
+    expect(s.turn!.answeringTeamId).toBe('t0');
+    expect(s.turn!.timer).toBeNull();
+  });
+  it('مباراة مفتوحة: لا جولة أخيرة مهما ارتفع الرصيد، وتنتهي بإنهاء المقدّم', () => {
+    let s = createGame(settings(2, { endMode: 'open', winTarget: 60 }), NOW);
+    for (let i = 0; i < 6; i++) s = reinforce(s, 20, true);
+    expect(s.endgame).toBeNull();
+    expect(s.phase).toBe('choose_action');
+    expect(s.teams[0].soldiers).toBe(110);
+    s = run(s, { type: 'END_NOW', now: NOW });
+    expect(s.phase).toBe('tiebreak'); // ١١٠ مقابل ١١٠
   });
 });
 

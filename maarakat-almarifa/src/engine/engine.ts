@@ -1,6 +1,6 @@
 import {
   Action, AttemptResult, FIRST_ANSWER_MS, GameCore, GameState, HISTORY_LIMIT, LogKind,
-  REFILL_SOLDIERS, SECOND_ANSWER_MS, Settings, Stake, STAKE_DIFFICULTY, STAKES, TeamState, TIEBREAK_DIFFICULTY,
+  REFILL_SOLDIERS, SECOND_ANSWER_MS, Settings, Stake, TeamState, TIEBREAK_DIFFICULTY, Difficulty, DEFAULT_EASY_MAX, DEFAULT_MEDIUM_MAX,
   TimerState, Turn, DIFFICULTY_LABEL,
 } from './types';
 
@@ -82,8 +82,21 @@ export function fmt(n: number): string {
 }
 
 /** الأعداد المتاحة للمهمة بحسب الرصيد */
-export function allowedStakes(soldiers: number): Stake[] {
-  return STAKES.filter((s) => s <= soldiers);
+export function isValidStake(soldiers: number, stake: Stake): boolean {
+  return Number.isInteger(stake) && stake >= 1 && stake <= soldiers;
+}
+
+/** مستوى السؤال بحسب عدد الجنود المختار */
+export function difficultyFor(stake: number, settings: Pick<Settings, 'easyMax' | 'mediumMax'>): Difficulty {
+  const easyMax = settings.easyMax ?? DEFAULT_EASY_MAX;
+  const mediumMax = settings.mediumMax ?? DEFAULT_MEDIUM_MAX;
+  if (stake <= easyMax) return 'easy';
+  if (stake <= mediumMax) return 'medium';
+  return 'hard';
+}
+
+export function isTimed(settings: Pick<Settings, 'answerSeconds'>): boolean {
+  return typeof settings.answerSeconds === 'number' && settings.answerSeconds > 0;
 }
 
 /** الخصوم المسموح بهم للفريق المبادر */
@@ -184,6 +197,11 @@ function startTimer(ms: number, now: number): TimerState {
   return { durationMs: ms, remainingMs: ms, endsAt: now + ms };
 }
 
+/** مؤقّت فقط إن كانت المباراة موقوتة */
+function timerIf(s: GameCore, ms: number, now: number): TimerState | null {
+  return isTimed(s.settings) ? startTimer(ms, now) : null;
+}
+
 function teamName(s: GameCore, id: string | null) {
   return s.teams.find((t) => t.id === id)?.name ?? '';
 }
@@ -251,7 +269,7 @@ function applyAttempt(s: GameState, result: AttemptResult, now: number): GameSta
   if (contenders.length === 1) {
     // الفريق الآخر يحصل على فرصته فورًا
     return withTurn(s, {
-      attempts, contenders, stage: 'answering', answeringTeamId: contenders[0], timer: startTimer(SECOND_ANSWER_MS, now),
+      attempts, contenders, stage: 'answering', answeringTeamId: contenders[0], timer: timerIf(s, SECOND_ANSWER_MS, now),
     });
   }
   // أسئلة فاصلة بين أكثر من فريقين: يعود المقدّم لاختيار الفريق التالي
@@ -301,7 +319,7 @@ export function reducer(s: GameState, a: Action): GameState {
   switch (a.type) {
     case 'CHOOSE_MODE': {
       if (s.phase !== 'choose_action' && s.phase !== 'choose_stake') return s;
-      if (currentTeam(s).soldiers < STAKES[0]) return s;
+      if (currentTeam(s).soldiers < 1) return s;
       return { ...s, phase: 'choose_stake', pendingMode: a.mode, flash: null };
     }
     case 'BACK_TO_ACTION':
@@ -311,8 +329,8 @@ export function reducer(s: GameState, a: Action): GameState {
     case 'START_TURN': {
       if (s.phase !== 'choose_stake' || !s.pendingMode) return s;
       const team = currentTeam(s);
-      if (!allowedStakes(team.soldiers).includes(a.stake)) return s;
-      const difficulty = STAKE_DIFFICULTY[a.stake];
+      if (!isValidStake(team.soldiers, a.stake)) return s;
+      const difficulty = difficultyFor(a.stake, s.settings);
       if (s.pendingMode === 'confront') {
         if (!a.opponentId || !allowedOpponents(s, team.id).includes(a.opponentId)) return s;
         let g = newTurn(s, {
@@ -354,16 +372,16 @@ export function reducer(s: GameState, a: Action): GameState {
       if (s.phase !== 'question' || !t || t.stage !== 'reading') return s;
       if (t.mode === 'reinforce' || t.mode === 'refill' || t.step === 'capture') {
         return withTurn(s, {
-          stage: 'answering', answeringTeamId: t.initiatorId, timer: startTimer(s.settings.answerSeconds * 1000, a.now),
+          stage: 'answering', answeringTeamId: t.initiatorId, timer: timerIf(s, (s.settings.answerSeconds ?? 0) * 1000, a.now),
         });
       }
       // مهلة طلب الإجابة تساوي مدة الإجابة العامة
-      return withTurn(s, { stage: 'buzz', timer: startTimer(s.settings.answerSeconds * 1000, a.now) });
+      return withTurn(s, { stage: 'buzz', timer: timerIf(s, (s.settings.answerSeconds ?? 0) * 1000, a.now) });
     }
     case 'BUZZ': {
       if (s.phase !== 'question' || !t || t.stage !== 'buzz' || !t.contenders.includes(a.teamId)) return s;
       const ms = t.attempts.length === 0 ? FIRST_ANSWER_MS : SECOND_ANSWER_MS;
-      return withTurn(s, { stage: 'answering', answeringTeamId: a.teamId, timer: startTimer(ms, a.now) });
+      return withTurn(s, { stage: 'answering', answeringTeamId: a.teamId, timer: timerIf(s, ms, a.now) });
     }
     case 'MARK': {
       if (s.phase !== 'question' || !t || t.stage !== 'answering') return s;

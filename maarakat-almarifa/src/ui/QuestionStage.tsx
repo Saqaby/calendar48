@@ -110,7 +110,7 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
             <button className={`btn xl ${t.mode === 'confront' ? 'danger' : t.mode === 'tiebreak' ? 'gold' : 'primary'}`} disabled={paused}
               onClick={() => dispatch({ type: 'BEGIN', now: Date.now() })}>
               {t.step === 'rescue' ? 'بدء سؤال الاستنقاذ' : t.mode === 'tiebreak' ? 'بدء السؤال الفاصل'
-                : `${t.step === 'capture' ? 'بدء سؤال الأسر' : 'بدء المؤقّت'} (${fmt(game.settings.answerSeconds)} ث)`}
+                : `${t.step === 'capture' ? 'بدء سؤال الأسر' : t.timer === null && !game.settings.answerSeconds ? 'بدء الإجابة' : 'بدء المؤقّت'}${game.settings.answerSeconds ? ` (${fmt(game.settings.answerSeconds)} ث)` : ''}`}
             </button>
             <button className="btn ghost" onClick={replace}><Icon name="swap" size={18} /> سؤال بديل</button>
             {t.step === 'rescue' && (
@@ -148,7 +148,7 @@ export function QuestionStage({ api, game, paused }: { api: AppApi; game: GameSt
         {t.stage === 'answering' && answering && (
           <div className="ctrl-row">
             <p className="ctrl-hint">يجيب الآن: <b style={{ color: `color-mix(in srgb, ${answering.color} 70%, #14213d)` }}>{answering.name}</b>
-              {t.step === 'rescue' || t.mode === 'tiebreak' ? ` — ${fmt(Math.round(t.timer!.durationMs / 1000))} ثوانٍ` : ''}</p>
+              {t.timer && (t.step === 'rescue' || t.mode === 'tiebreak') ? ` — ${fmt(Math.round(t.timer.durationMs / 1000))} ثوانٍ` : ''}</p>
             <div className="judge-buttons">
               <button className="btn success xl" onClick={() => dispatch({ type: 'MARK', result: 'correct', now: Date.now() })}><Icon name="check" /> إجابة صحيحة</button>
               <button className="btn danger xl" onClick={() => dispatch({ type: 'MARK', result: 'wrong', now: Date.now() })}><Icon name="cross" /> إجابة خاطئة</button>

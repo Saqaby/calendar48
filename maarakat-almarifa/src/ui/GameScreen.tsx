@@ -1,10 +1,10 @@
 import { CSSProperties, useEffect, useRef, useState } from 'react';
 import type { AppApi } from '../App';
 import {
-  allowedOpponents, allowedStakes, clockElapsed, computeEffect, currentTeam, fmt, ranking,
+  allowedOpponents, clockElapsed, computeEffect, currentTeam, difficultyFor, fmt, isValidStake, ranking,
 } from '../engine/engine';
 import {
-  DIFFICULTY_LABEL, GameState, REFILL_SOLDIERS, Stake, STAKE_DIFFICULTY, STAKES, TeamState,
+  DEFAULT_EASY_MAX, DEFAULT_MEDIUM_MAX, DIFFICULTY_LABEL, GameState, REFILL_SOLDIERS, Settings, Stake, TeamState,
 } from '../engine/types';
 import { play } from '../audio';
 import { Delta, Emblem, formatClock, Icon, useNow } from './common';
@@ -87,7 +87,7 @@ export function GameScreen({ api, game }: { api: AppApi; game: GameState }) {
               <Icon name="clock" size={18} /> {formatClock(limit - elapsed)}
             </span>
           ) : (
-            <span className="chip ghost-chip">الهدف: {fmt(game.settings.winTarget)} جندي</span>
+            <span className="chip ghost-chip">{game.settings.endMode === 'open' ? 'مباراة مفتوحة' : `الهدف: ${fmt(game.settings.winTarget)} جندي`}</span>
           )}
         </div>
         <div className="topbar-tools">
@@ -216,8 +216,8 @@ function TurnPanel({ api, game }: { api: AppApi; game: GameState }) {
   const { dispatch } = api;
   const team = currentTeam(game);
   const [opponentId, setOpponentId] = useState<string | null>(null);
-  const [stake, setStake] = useState<Stake | null>(null);
-  useEffect(() => { setOpponentId(null); setStake(null); }, [game.phase, game.pendingMode, game.currentIndex, game.round]);
+  const [stake, setStake] = useState<Stake>(Math.min(10, team.soldiers));
+  useEffect(() => { setOpponentId(null); setStake(Math.min(10, team.soldiers)); }, [game.phase, game.pendingMode, game.currentIndex, game.round, team.soldiers]);
 
   const style = { '--team': team.color } as CSSProperties;
   const header = (
@@ -230,7 +230,7 @@ function TurnPanel({ api, game }: { api: AppApi; game: GameState }) {
           <p className="turn-soldiers"><span className="num">{fmt(team.soldiers)}</span> جندي في الميدان</p>
         </div>
       </div>
-      {game.endgame && <p className="endgame-note">{game.endgame.reason === 'time' ? 'انتهى وقت المباراة' : 'بلغ جيشٌ رصيد الفوز'} — تُستكمل الجولة الحالية ثم يُعلن الفائز.</p>}
+      {game.endgame && game.endgame.reason !== 'manual' && <p className="endgame-note">{game.endgame.reason === 'time' ? 'انتهى وقت المباراة' : 'بلغ جيشٌ رصيد الفوز'} — تُستكمل الجولة الحالية ثم يُعلن الفائز.</p>}
     </div>
   );
 
@@ -268,12 +268,13 @@ function TurnPanel({ api, game }: { api: AppApi; game: GameState }) {
   }
 
   const mode = game.pendingMode!;
-  const stakes = allowedStakes(team.soldiers);
   const opps = allowedOpponents(game, team.id);
   const opponent = game.teams.find((t) => t.id === opponentId) ?? null;
+  const valid = isValidStake(team.soldiers, stake);
 
-  const begin = (s: Stake) => {
-    dispatch({ type: 'START_TURN', stake: s, opponentId: mode === 'confront' ? opponentId! : undefined, now: Date.now() });
+  const begin = () => {
+    if (!valid || (mode === 'confront' && !opponent)) return;
+    dispatch({ type: 'START_TURN', stake, opponentId: mode === 'confront' ? opponentId! : undefined, now: Date.now() });
     if (mode === 'confront') play('confront');
   };
 
@@ -305,38 +306,63 @@ function TurnPanel({ api, game }: { api: AppApi; game: GameState }) {
       )}
 
       <div className={`step ${mode === 'confront' && !opponent ? 'dim' : ''}`}>
-        <h3>{mode === 'confront' && <span className="step-num">٢</span>} اختاروا عدد الجنود المشاركين</h3>
-        <div className="missions">
-          {STAKES.map((s) => {
-            const d = STAKE_DIFFICULTY[s];
-            const tooMany = !stakes.includes(s);
-            const disabled = tooMany || (mode === 'confront' && !opponent);
-            return (
-              <button key={s} className={`mission diff-${d} ${stake === s ? 'on' : ''}`} disabled={disabled}
-                onClick={() => (mode === 'reinforce' ? begin(s) : setStake(s))} aria-pressed={stake === s}>
-                <span className="mission-stake">{fmt(s)}</span>
-                <span className="mission-unit">{s === 20 ? 'جنديًا' : 'جنود'}</span>
-                <span className={`chip diff-${d}`}>{DIFFICULTY_LABEL[d]}</span>
-                {mode === 'reinforce' && !tooMany && (
-                  <span className="mission-preview">
-                    <span className="good">صحيحة: {fmt(team.soldiers + s)}</span>
-                    <span className="bad">خاطئة: {fmt(team.soldiers - s)}</span>
-                  </span>
-                )}
-                {tooMany && <span className="mission-note">يتجاوز رصيدكم</span>}
-              </button>
-            );
-          })}
-        </div>
+        <h3>{mode === 'confront' && <span className="step-num">٢</span>} {mode === 'reinforce' ? 'كم جنديًا تراهنون به؟' : 'كم جنديًا تهاجمون به؟'}</h3>
+        <StakePicker value={stake} max={team.soldiers} settings={game.settings} onChange={setStake} disabled={mode === 'confront' && !opponent} />
       </div>
 
-      {mode === 'confront' && opponent && stake && (
+      {mode === 'reinforce' && valid && (
+        <div className="stake-outcomes">
+          <span className="good">إجابة صحيحة: {fmt(team.soldiers)} ← <b>{fmt(team.soldiers + stake)}</b></span>
+          <span className="bad">خاطئة أو انتهاء الوقت: {fmt(team.soldiers)} ← <b>{fmt(team.soldiers - stake)}</b></span>
+        </div>
+      )}
+      {mode === 'confront' && opponent && valid && (
         <div className="confront-preview">
           <h3>أثر النتائج المحتملة</h3>
           <OutcomeTable game={game} stake={stake} initiator={team} opponent={opponent} />
-          <button className="btn danger xl block" onClick={() => begin(stake)}>استعدوا للمواجهة</button>
         </div>
       )}
+      <button className={`btn xl block ${mode === 'confront' ? 'danger' : 'primary'}`} disabled={!valid || (mode === 'confront' && !opponent)} onClick={begin}>
+        {mode === 'confront' ? 'استعدوا للمواجهة' : 'ابدأ المهمة'}
+      </button>
+    </div>
+  );
+}
+
+/** اختيار حر لعدد الجنود مع إظهار مستوى السؤال الناتج */
+function StakePicker({ value, max, settings, onChange, disabled }: {
+  value: number; max: number; settings: Settings; onChange: (n: number) => void; disabled?: boolean;
+}) {
+  const easyMax = settings.easyMax ?? DEFAULT_EASY_MAX;
+  const mediumMax = settings.mediumMax ?? DEFAULT_MEDIUM_MAX;
+  const valid = isValidStake(max, value);
+  const d = difficultyFor(valid ? value : 1, settings);
+  const clamp = (n: number) => Math.max(1, Math.min(max, Math.round(n)));
+  const quick = Array.from(new Set([5, 10, 20, 50, 100].filter((n) => n < max).concat(max)));
+  const ranges: [string, string][] = [
+    ['easy', `${fmt(1)}–${fmt(easyMax)}`], ['medium', `${fmt(easyMax + 1)}–${fmt(mediumMax)}`], ['hard', `${fmt(mediumMax + 1)} فأكثر`],
+  ];
+  return (
+    <div className={`stake-picker ${disabled ? 'dim' : ''}`}>
+      <div className="stake-main">
+        <button className="icon-btn stake-step" onClick={() => onChange(clamp(value - 1))} disabled={disabled || value <= 1} aria-label="إنقاص جندي">−</button>
+        <input className="stake-input" type="number" min={1} max={max} value={Number.isNaN(value) ? '' : value} disabled={disabled}
+          onChange={(e) => onChange(e.target.value === '' ? NaN : Number(e.target.value))} aria-label="عدد الجنود" />
+        <button className="icon-btn stake-step" onClick={() => onChange(clamp(value + 1))} disabled={disabled || value >= max} aria-label="زيادة جندي">+</button>
+        <span className={`stake-level diff-${d}`}>{valid ? `سؤال ${DIFFICULTY_LABEL[d]}` : `اختاروا عددًا من ١ إلى ${fmt(max)}`}</span>
+      </div>
+      <div className="stake-quick">
+        {quick.map((n) => (
+          <button key={n} className={`seg-btn ${value === n ? 'on' : ''}`} disabled={disabled} onClick={() => onChange(n)}>
+            {n === max ? `كل الجيش (${fmt(n)})` : fmt(n)}
+          </button>
+        ))}
+      </div>
+      <div className="stake-ranges" aria-label="مستويات الأسئلة">
+        {ranges.map(([k, r]) => (
+          <span key={k} className={`range-chip diff-${k} ${valid && d === k ? 'on' : ''}`}>{DIFFICULTY_LABEL[k as keyof typeof DIFFICULTY_LABEL]}: {r}</span>
+        ))}
+      </div>
     </div>
   );
 }

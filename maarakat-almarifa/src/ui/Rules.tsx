@@ -1,7 +1,13 @@
 import type { AppApi } from '../App';
 import { Icon } from './common';
+import { fmt } from '../engine/engine';
+import { DEFAULT_EASY_MAX, DEFAULT_MEDIUM_MAX } from '../engine/types';
+import { loadSettings } from '../storage';
 
 export function Rules({ api }: { api: AppApi }) {
+  const st = api.game?.settings ?? loadSettings();
+  const easyMax = st?.easyMax ?? DEFAULT_EASY_MAX;
+  const mediumMax = st?.mediumMax ?? DEFAULT_MEDIUM_MAX;
   return (
     <main className="page rules">
       <header className="page-head">
@@ -12,11 +18,16 @@ export function Rules({ api }: { api: AppApi }) {
         <section className="panel">
           <h2>الفكرة</h2>
           <p>كل فريق جيش. يزيد الجيش جنوده بالإجابة عن الأسئلة أو بمواجهة جيش آخر في تحدي سرعة. تتناوب الجيوش على الأدوار، ويختار صاحب الدور: <b>طلب تعزيزات</b> أو <b>شنّ هجوم</b>.</p>
+          <p>في كل دور يحدّد الجيش بنفسه عدد الجنود الذي يراهن به أو يهاجم به، من جندي واحد حتى رصيده كاملًا. وكلما زاد العدد صعب السؤال:</p>
           <table className="table">
-            <thead><tr><th>الجنود المشاركون</th><th>صعوبة السؤال</th></tr></thead>
-            <tbody><tr><td>٥ جنود</td><td>سهل</td></tr><tr><td>١٠ جنود</td><td>متوسط</td></tr><tr><td>٢٠ جنديًا</td><td>صعب</td></tr></tbody>
+            <thead><tr><th>عدد الجنود</th><th>صعوبة السؤال</th></tr></thead>
+            <tbody>
+              <tr><td>من ١ إلى {fmt(easyMax)}</td><td>سهل</td></tr>
+              <tr><td>من {fmt(easyMax + 1)} إلى {fmt(mediumMax)}</td><td>متوسط</td></tr>
+              <tr><td>{fmt(mediumMax + 1)} فأكثر</td><td>صعب</td></tr>
+            </tbody>
           </table>
-          <p className="muted">لا يجوز اختيار عدد يتجاوز رصيد الجيش.</p>
+          <p className="muted">يمكن تعديل هذه الحدود من شاشة إعداد المعركة.</p>
         </section>
         <section className="panel accent-green">
           <h2>التعزيزات</h2>
@@ -24,7 +35,7 @@ export function Rules({ api }: { api: AppApi }) {
             <li>إجابة صحيحة: يحتفظ الجيش بجنوده ويكسب تعزيزات مساوية لعدد المهمة.</li>
             <li>إجابة خاطئة أو انتهاء الوقت: يخسر عدد الجنود المشاركين.</li>
           </ul>
-          <p className="example">مثال: ٥٠ جنديًا ومهمة بـ١٠ ← الصحيحة ٦٠، والخاطئة ٤٠.</p>
+          <p className="example">مثال: ٥٠ جنديًا ورهان بـ٣٥ (سؤال متوسط) ← الصحيحة ٨٥، والخاطئة ١٥.</p>
         </section>
         <section className="panel accent-red">
           <h2>الهجوم: أسر ثم استنقاذ</h2>
@@ -55,6 +66,7 @@ export function Rules({ api }: { api: AppApi }) {
           <ul>
             <li>عندما يبلغ جيشٌ رصيد الفوز تبدأ الجولة الأخيرة، وتُستكمل أدوارها حتى تتساوى الجيوش في عدد الأدوار، ثم يفوز الأعلى رصيدًا.</li>
             <li>في وضع الوقت المحدد: عند انتهاء الوقت يُستكمل الدور والجولة الجاريان ثم يُحدّد الفائز.</li>
+            <li>في المباراة المفتوحة: لا رصيد فوز محدد، وتستمر حتى يضغط المقدّم «إنهاء» فيفوز الأعلى رصيدًا.</li>
             <li>عند التعادل على المركز الأول تُطرح أسئلة فاصلة متوسطة بين المتعادلين حتى يبقى فائز واحد، دون تغيير الأرصدة.</li>
           </ul>
         </section>
